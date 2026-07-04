@@ -32,6 +32,7 @@ sys.modules.setdefault("telegram.ext", types.ModuleType("telegram.ext"))
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import (
     BasePlatformAdapter,
+    MessageContextRef,
     MessageEvent,
     MessageType,
     SendResult,
@@ -190,6 +191,57 @@ async def test_rapid_text_followups_accumulate_instead_of_replacing():
 
 
 @pytest.mark.asyncio
+async def test_debounce_buffers_rapid_text_then_flushes_to_pending():
+    adapter = _make_adapter()
+    adapter._busy_text_debounce_seconds = 0.05
+
+    first = _make_event("part one")
+    session_key = build_session_key(first.source)
+    adapter._active_sessions[session_key] = asyncio.Event()
+
+    await adapter.handle_message(_make_event("part two"))
+    assert session_key in adapter._text_debounce
+    assert _debounced_event(adapter, session_key).text == "part two"
+    assert session_key not in adapter._pending_messages
+
+    await adapter.handle_message(_make_event("part three"))
+    assert _debounced_event(adapter, session_key).text == "part two\npart three"
+
+    await asyncio.sleep(0.15)
+
+    assert session_key not in adapter._text_debounce
+    assert adapter._pending_messages[session_key].text == "part two\npart three"
+
+
+@pytest.mark.asyncio
+async def test_debounce_preserves_context_refs_from_later_chunks():
+    adapter = _make_adapter()
+    adapter._busy_text_debounce_seconds = 0.05
+
+    first = _make_event("part one")
+    session_key = build_session_key(first.source)
+    adapter._active_sessions[session_key] = asyncio.Event()
+    second = _make_event("part two")
+    second.context_refs.append(
+        MessageContextRef(kind="forward", platform="telegram", origin_name="Second Sender")
+    )
+    third = _make_event("part three")
+    third.context_refs.append(
+        MessageContextRef(kind="forward", platform="telegram", origin_name="Third Sender")
+    )
+
+    await adapter.handle_message(second)
+    await adapter.handle_message(third)
+    await asyncio.sleep(0.15)
+
+    pending = adapter._pending_messages[session_key]
+    assert [ref.origin_name for ref in pending.context_refs] == [
+        "Second Sender",
+        "Third Sender",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_debounce_resets_timer_on_new_arrival():
     adapter = _make_adapter()
     adapter._busy_text_debounce_seconds = 0.1
@@ -260,5 +312,4 @@ def test_command_messages_bypass_debounce_even_in_queue_mode():
     adapter = _make_adapter()
     assert not adapter._is_queue_text_debounce_candidate(_make_event(""))
     assert not adapter._is_queue_text_debounce_candidate(_make_event("/stop"))
-
 
