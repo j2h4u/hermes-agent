@@ -12,6 +12,8 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import yaml
+
 from hermes_cli.config import get_hermes_home
 from utils import atomic_json_write
 
@@ -117,7 +119,7 @@ async def build_channel_directory(adapters: Dict[Any, Any]) -> Dict[str, Any]:
     """
     from gateway.config import Platform
 
-    platforms: Dict[str, List[Dict[str, str]]] = {}
+    platforms: Dict[str, List[Dict[str, Any]]] = {}
 
     for platform, adapter in adapters.items():
         try:
@@ -125,6 +127,8 @@ async def build_channel_directory(adapters: Dict[Any, Any]) -> Dict[str, Any]:
                 platforms["discord"] = await asyncio.to_thread(_build_discord, adapter)
             elif platform == Platform.SLACK:
                 platforms["slack"] = await _build_slack(adapter)
+            elif platform == Platform.TELEGRAM:
+                platforms["telegram"] = await asyncio.to_thread(_build_telegram, adapter)
         except Exception as e:
             logger.warning("Channel directory: failed to build %s: %s", platform.value, e)
 
@@ -211,6 +215,97 @@ def _build_discord(adapter) -> List[Dict[str, str]]:
 
     # Merge any DMs from session history
     channels.extend(_build_from_sessions("discord"))
+    return channels
+
+
+def _load_configured_telegram_dm_topics() -> List[Dict[str, Any]]:
+    config_path = get_hermes_home() / "config.yaml"
+    if not config_path.exists():
+        return []
+
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.debug("Channel directory: failed to read Telegram dm_topics config: %s", e)
+        return []
+
+    dm_topics = (
+        config.get("platforms", {})
+        .get("telegram", {})
+        .get("extra", {})
+        .get("dm_topics", [])
+    )
+    return dm_topics if isinstance(dm_topics, list) else []
+
+
+def _add_telegram_dm_topics(
+    channels: List[Dict[str, Any]],
+    seen_ids: set[str],
+    dm_topics_config: Any,
+) -> None:
+    if not isinstance(dm_topics_config, list):
+        return
+
+    for chat_entry in dm_topics_config:
+        if not isinstance(chat_entry, dict):
+            continue
+        chat_id = chat_entry.get("chat_id")
+        if not chat_id:
+            continue
+        chat_id = str(chat_id)
+        chat_name = str(chat_entry.get("name") or chat_id)
+
+        for topic in chat_entry.get("topics", []) or []:
+            if not isinstance(topic, dict):
+                continue
+            topic_name = topic.get("name")
+            thread_id = topic.get("thread_id")
+            if not topic_name or not thread_id:
+                continue
+            thread_id = str(thread_id)
+            entry_id = f"{chat_id}:{thread_id}"
+            if entry_id in seen_ids:
+                continue
+            channels.append({
+                "id": entry_id,
+                "name": f"{chat_name} / {topic_name}",
+                "type": "dm_topic",
+                "thread_id": thread_id,
+            })
+            seen_ids.add(entry_id)
+
+
+def _build_telegram(adapter) -> List[Dict[str, Any]]:
+    """List configured Telegram DM topics plus sessions discovered at runtime."""
+    channels: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    def add_channel(entry: Dict[str, Any]) -> None:
+        entry_id = entry.get("id")
+        if not entry_id or entry_id in seen_ids:
+            return
+        channels.append(entry)
+        seen_ids.add(entry_id)
+
+    for entry in _build_from_sessions("telegram"):
+        add_channel(entry)
+
+    _add_telegram_dm_topics(channels, seen_ids, _load_configured_telegram_dm_topics())
+    _add_telegram_dm_topics(channels, seen_ids, getattr(adapter, "_dm_topics_config", None))
+
+    for cache_key, thread_id in (getattr(adapter, "_dm_topics", None) or {}).items():
+        if not thread_id or ":" not in cache_key:
+            continue
+        chat_id, topic_name = cache_key.split(":", 1)
+        thread_id = str(thread_id)
+        add_channel({
+            "id": f"{chat_id}:{thread_id}",
+            "name": f"{chat_id} / {topic_name}",
+            "type": "dm_topic",
+            "thread_id": thread_id,
+        })
+
     return channels
 
 

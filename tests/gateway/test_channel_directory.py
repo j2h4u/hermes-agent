@@ -7,6 +7,7 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from gateway.config import Platform
 from gateway.channel_directory import (
     build_channel_directory,
     lookup_channel_type,
@@ -84,6 +85,48 @@ class TestBuildChannelDirectoryWrites:
 
         assert result == previous
 
+    def test_telegram_dm_topics_from_config_are_written(self, tmp_path, monkeypatch):
+        cache_file = tmp_path / "channel_directory.json"
+        adapter = SimpleNamespace(
+            _dm_topics_config=[
+                {
+                    "chat_id": 591994976,
+                    "topics": [
+                        {"name": "Reports", "thread_id": 306001},
+                        {"name": "Logs", "thread_id": 306141},
+                    ],
+                }
+            ],
+            _dm_topics={},
+        )
+        monkeypatch.setattr(
+            "gateway.channel_directory._build_from_sessions",
+            lambda platform: [],
+        )
+        monkeypatch.setattr(
+            "gateway.channel_directory._load_configured_telegram_dm_topics",
+            lambda: [],
+        )
+
+        with patch("gateway.channel_directory.DIRECTORY_PATH", cache_file):
+            asyncio.run(build_channel_directory({Platform.TELEGRAM: adapter}))
+            on_disk = json.loads(cache_file.read_text())
+            assert resolve_channel_name("telegram", "591994976 / Reports") == "591994976:306001"
+
+        assert on_disk["platforms"]["telegram"] == [
+            {
+                "id": "591994976:306001",
+                "name": "591994976 / Reports",
+                "type": "dm_topic",
+                "thread_id": "306001",
+            },
+            {
+                "id": "591994976:306141",
+                "name": "591994976 / Logs",
+                "type": "dm_topic",
+                "thread_id": "306141",
+            },
+        ]
 
 class TestBuildChannelDirectoryOffload:
     def test_discord_builder_runs_off_event_loop_thread(self, tmp_path):

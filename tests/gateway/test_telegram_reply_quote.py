@@ -8,6 +8,7 @@ message as ``reply_to_text``, which can cause it to act on unrelated
 actionable-looking text the user did not quote (#22619).
 """
 
+import json
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -46,6 +47,8 @@ def _make_message(
     reply_to_caption=None,
     reply_to_id=42,
     quote_text=None,
+    reply_to_forum_topic_created=None,
+    web_page=None,
 ):
     chat = SimpleNamespace(id=111, type="private", title=None, full_name="Alice")
     user = SimpleNamespace(id=42, full_name="Alice")
@@ -56,6 +59,7 @@ def _make_message(
             message_id=reply_to_id,
             text=reply_to_text,
             caption=reply_to_caption,
+            forum_topic_created=reply_to_forum_topic_created,
         )
 
     quote = None
@@ -70,6 +74,7 @@ def _make_message(
         message_id=1001,
         reply_to_message=reply_to_message,
         quote=quote,
+        web_page=web_page,
         date=None,
         forum_topic_created=None,
     )
@@ -142,3 +147,67 @@ def test_empty_quote_text_falls_back_to_full_reply():
     event = adapter._build_message_event(msg, MessageType.TEXT)
 
     assert event.reply_to_text == "Prior message body"
+
+
+def test_dm_topic_seed_reply_is_not_treated_as_user_reply():
+    """Telegram DM-topic seed anchors should not become reply_to_message_id."""
+    from gateway.platforms.base import MessageType
+
+    adapter = _make_adapter()
+    msg = _make_message(
+        text="message inside topic",
+        reply_to_text="Topic created",
+        reply_to_forum_topic_created=SimpleNamespace(name="Inbox"),
+    )
+
+    event = adapter._build_message_event(msg, MessageType.TEXT)
+
+    assert event.reply_to_message_id is None
+    assert event.reply_to_text is None
+
+
+def test_web_page_preview_is_exposed_in_event_text():
+    """Telegram link previews carry useful URL metadata even when text is short."""
+    from gateway.platforms.base import MessageType
+
+    adapter = _make_adapter()
+    msg = _make_message(
+        text="save this",
+        web_page=SimpleNamespace(
+            url="https://example.com/product",
+            title="Example Product",
+            site_name="Example",
+            author="Ada",
+            description="A useful thing.",
+        ),
+    )
+
+    event = adapter._build_message_event(msg, MessageType.TEXT)
+
+    assert event.text == (
+        "[Link preview]\n"
+        "URL: https://example.com/product\n"
+        "Title: Example Product\n"
+        "Site: Example\n"
+        "Author: Ada\n"
+        "Description: A useful thing.\n\n"
+        "save this"
+    )
+
+
+def test_raw_message_debug_ring_buffer_keeps_last_ten(tmp_path):
+    """The Telegram raw-message debug log is bounded and JSONL-readable."""
+    original_path = TelegramAdapter._DEBUG_MSG_LOG_PATH
+    TelegramAdapter._DEBUG_MSG_LOG_PATH = tmp_path / "telegram_messages.jsonl"
+    try:
+        for idx in range(12):
+            message = SimpleNamespace(to_dict=lambda idx=idx: {"message_id": idx})
+            TelegramAdapter._dump_message_debug(message)
+
+        lines = TelegramAdapter._DEBUG_MSG_LOG_PATH.read_text(encoding="utf-8").splitlines()
+    finally:
+        TelegramAdapter._DEBUG_MSG_LOG_PATH = original_path
+
+    payloads = [json.loads(line) for line in lines]
+    assert [payload["message_id"] for payload in payloads] == list(range(2, 12))
+    assert all("_hermes_ts" in payload for payload in payloads)

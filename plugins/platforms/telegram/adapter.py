@@ -7912,6 +7912,32 @@ class TelegramAdapter(BasePlatformAdapter):
         """
         return getattr(update, "effective_message", None) or getattr(update, "message", None)
 
+    # Telegram evolves faster than the gateway adapter. Keep a tiny raw-message
+    # ring buffer so the agent can inspect fields PTB exposes but Hermes does
+    # not yet map into MessageEvent, such as web_page/link previews.
+    _DEBUG_MSG_LOG_PATH = _Path("/opt/data/debug/telegram_messages.jsonl")
+    _DEBUG_MSG_MAX_LINES = 10
+
+    @classmethod
+    def _dump_message_debug(cls, message: Message) -> None:
+        """Write the raw Telegram message as one JSONL row in a small ring buffer."""
+        try:
+            raw = message.to_dict()
+            raw["_hermes_ts"] = datetime.now(tz=timezone.utc).isoformat()
+            cls._DEBUG_MSG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            lines = []
+            if cls._DEBUG_MSG_LOG_PATH.exists():
+                try:
+                    lines = cls._DEBUG_MSG_LOG_PATH.read_text(encoding="utf-8").rstrip("\n").split("\n")
+                except Exception:
+                    pass
+            lines.append(json.dumps(raw, ensure_ascii=False, default=str))
+            if len(lines) > cls._DEBUG_MSG_MAX_LINES:
+                lines = lines[-cls._DEBUG_MSG_MAX_LINES:]
+            cls._DEBUG_MSG_LOG_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
     async def _handle_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle incoming text messages.
 
@@ -7938,6 +7964,8 @@ class TelegramAdapter(BasePlatformAdapter):
                 self._observe_unmentioned_group_message(msg, MessageType.TEXT, update_id=update.update_id)
             return
         await self._ensure_forum_commands(update.message)
+
+        self._dump_message_debug(msg)
 
         event = self._build_message_event(msg, MessageType.TEXT, update_id=update.update_id)
         event.text = self._clean_bot_trigger_text(event.text)
@@ -8197,6 +8225,8 @@ class TelegramAdapter(BasePlatformAdapter):
             return
 
         msg = update.message
+
+        self._dump_message_debug(msg)
 
         msg_type = self._media_message_type(msg)
 
@@ -8855,30 +8885,37 @@ class TelegramAdapter(BasePlatformAdapter):
         reply_to_id = None
         reply_to_text = None
         if message.reply_to_message:
-            reply_to_id = str(message.reply_to_message.message_id)
-            quote = getattr(message, "quote", None)
-            quote_text = getattr(quote, "text", None) if quote is not None else None
-            if quote_text:
-                reply_to_text = quote_text
+            # Telegram DM topics attach the topic seed service message as
+            # reply_to_message to anchor the user's message to the topic. That
+            # seed is not a user reply; replying back to it breaks the visible
+            # thread. Treat it as no reply so Hermes targets the user's message.
+            if getattr(message.reply_to_message, "forum_topic_created", None):
+                pass
             else:
-                reply_to_text = (
-                    message.reply_to_message.text
-                    or message.reply_to_message.caption
-                    or None
-                )
-                if not reply_to_text:
-                    # Prefer Telegram's native rich-message echo when present;
-                    # keep the local send-time index only as a fallback for
-                    # older/unrecoverable reply payloads.
-                    reply_to_text = self._extract_rich_reply_text(message.reply_to_message)
-                if not reply_to_text:
-                    try:
-                        from gateway import rich_sent_store
-                        reply_to_text = rich_sent_store.lookup(
-                            str(chat.id), reply_to_id
-                        )
-                    except Exception:
-                        reply_to_text = None
+                reply_to_id = str(message.reply_to_message.message_id)
+                quote = getattr(message, "quote", None)
+                quote_text = getattr(quote, "text", None) if quote is not None else None
+                if quote_text:
+                    reply_to_text = quote_text
+                else:
+                    reply_to_text = (
+                        message.reply_to_message.text
+                        or message.reply_to_message.caption
+                        or None
+                    )
+                    if not reply_to_text:
+                        # Prefer Telegram's native rich-message echo when
+                        # present; keep the local send-time index only as a
+                        # fallback for older/unrecoverable reply payloads.
+                        reply_to_text = self._extract_rich_reply_text(message.reply_to_message)
+                    if not reply_to_text:
+                        try:
+                            from gateway import rich_sent_store
+                            reply_to_text = rich_sent_store.lookup(
+                                str(chat.id), reply_to_id
+                            )
+                        except Exception:
+                            reply_to_text = None
 
         # Per-channel/topic ephemeral prompt
         from gateway.platforms.base import resolve_channel_prompt
@@ -8889,8 +8926,33 @@ class TelegramAdapter(BasePlatformAdapter):
             _chat_id_str if thread_id_str else None,
         )
 
+        web_page = getattr(message, "web_page", None)
+        web_page_text = ""
+        if web_page is not None:
+            web_page_lines = ["[Link preview]"]
+            web_page_url = getattr(web_page, "url", None)
+            web_page_title = getattr(web_page, "title", None)
+            web_page_site = getattr(web_page, "site_name", None)
+            web_page_author = getattr(web_page, "author", None)
+            web_page_description = getattr(web_page, "description", None)
+            if web_page_url:
+                web_page_lines.append(f"URL: {web_page_url}")
+            if web_page_title:
+                web_page_lines.append(f"Title: {web_page_title}")
+            if web_page_site:
+                web_page_lines.append(f"Site: {web_page_site}")
+            if web_page_author:
+                web_page_lines.append(f"Author: {web_page_author}")
+            if web_page_description:
+                web_page_lines.append(f"Description: {web_page_description}")
+            web_page_text = "\n".join(web_page_lines)
+
+        event_text = message.text or ""
+        if web_page_text:
+            event_text = f"{web_page_text}\n\n{event_text}" if event_text else web_page_text
+
         return MessageEvent(
-            text=message.text or "",
+            text=event_text,
             message_type=msg_type,
             source=source,
             raw_message=message,
