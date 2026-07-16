@@ -313,6 +313,30 @@ hermes-agent/
 `gateway.log` when running the gateway. Profile-aware via `get_hermes_home()`.
 Browse with `hermes logs [--follow] [--level ...] [--session ...]`.
 
+## Local Deploy Notes
+
+This checkout's `deploy` branch tracks `origin/deploy`; upstream code comes from
+`upstream/main` (`https://github.com/NousResearch/hermes-agent.git`). When
+checking for upstream updates, use either:
+
+```bash
+git fetch --all --prune
+```
+
+or two explicit commands:
+
+```bash
+git fetch upstream main
+git fetch origin deploy
+```
+
+Do not run `git fetch upstream origin`: Git treats `origin` as a refspec for the
+`upstream` remote, which is not what this workflow intends.
+
+The live deployment is Telegram-first. The dashboard is not part of the normal
+user workflow; avoid dashboard work unless it is needed for shared runtime code
+or the user explicitly asks for it.
+
 ## TypeScript Style
 
 Applies to TypeScript across Hermes: desktop, TUI, website, and future TS packages.
