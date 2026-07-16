@@ -431,6 +431,7 @@ def _normalize_job_record(job: Dict[str, Any]) -> Dict[str, Any]:
 def _secure_dir(path: Path):
     """Set directory to owner-only access (0700). No-op on Windows."""
     try:
+        _chown_to_docker_hermes(path)
         os.chmod(path, 0o700)
     except (OSError, NotImplementedError):
         pass  # Windows or other platforms where chmod is not supported
@@ -440,8 +441,26 @@ def _secure_file(path: Path):
     """Set file to owner-only read/write (0600). No-op on Windows."""
     try:
         if path.exists():
+            _chown_to_docker_hermes(path)
             os.chmod(path, 0o600)
     except (OSError, NotImplementedError):
+        pass
+
+
+def _chown_to_docker_hermes(path: Path):
+    """Keep Docker cron state readable by the supervised hermes user."""
+    if os.name != "posix" or not hasattr(os, "geteuid") or os.geteuid() != 0:
+        return
+    if not (Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()):
+        return
+    try:
+        import grp
+        import pwd
+
+        uid = pwd.getpwnam("hermes").pw_uid
+        gid = grp.getgrnam("hermes").gr_gid
+        os.chown(path, uid, gid)
+    except (ImportError, KeyError, OSError, NotImplementedError):
         pass
 
 
