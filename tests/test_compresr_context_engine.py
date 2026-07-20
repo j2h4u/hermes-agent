@@ -154,6 +154,22 @@ def test_success_returns_prefixed_body():
     assert e._previous_summary  # continuity state updated
 
 
+def test_memory_provider_context_is_preserved_as_source_material():
+    e = _engine()
+    captured = {}
+
+    def _capture(context, query):
+        captured["context"] = context
+        return "KEPT", {}
+
+    e._call_compresr = _capture
+    e._generate_summary(TURNS, memory_context="Remember project codename Atlas")
+
+    assert "MEMORY PROVIDER CONTEXT" in captured["context"]
+    assert '"Remember project codename Atlas"' in captured["context"]
+    assert "[CONVERSATION TURNS]" in captured["context"]
+
+
 def test_failure_falls_back_to_none():
     e = _engine()
 
