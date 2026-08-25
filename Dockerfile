@@ -314,7 +314,7 @@ RUN mkdir -p /opt/hermes/bin && \
     cp /opt/hermes/docker/hermes-exec-shim.sh /opt/hermes/bin/hermes && \
     cp /opt/hermes/docker/python-exec-shim.sh /opt/hermes/bin/python && \
     cp /opt/hermes/docker/python-exec-shim.sh /opt/hermes/bin/python3 && \
-    chmod 0755 /opt/hermes/bin/hermes && \
+    chmod 0755 /opt/hermes /opt/hermes/bin/hermes && \
     chmod 0755 /opt/hermes/bin/python /opt/hermes/bin/python3 && \
     printf 'docker\n' > /opt/hermes/.install_method && \
     chmod 0444 /opt/hermes/.install_method
