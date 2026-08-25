@@ -5,7 +5,13 @@
 FROM debian:13.4 AS sqlite_build
 ARG SQLITE_AUTOCONF_VERSION=3530400
 ARG SQLITE_SHA256=0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c
-RUN apt-get -o Acquire::Retries=3 update && \
+# Match the host's current Kazakhstan mirror; keep security on Debian's
+# authoritative security service.
+RUN sed -i \
+        -e 's|^URIs: http://deb.debian.org/debian$|URIs: http://mirror.ps.kz/debian|' \
+        -e 's|^URIs: http://deb.debian.org/debian-security$|URIs: http://security.debian.org/debian-security|' \
+        /etc/apt/sources.list.d/debian.sources && \
+    apt-get -o Acquire::Retries=3 update && \
     apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
         build-essential ca-certificates curl && \
     rm -rf /var/lib/apt/lists/* && \
@@ -68,13 +74,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright
 # replaces tini with s6-overlay's /init (PID 1 = s6-svscan), which reaps
 # zombies non-blockingly on SIGCHLD and additionally supervises the main
 # hermes process, the dashboard, and per-profile gateways.
-# senbonzakura/KZ deploy: deb.debian.org's Fastly geo-DNS routes .kz to a dead
-# PoP (~35 KB/s, 33% loss), so apt update crawls for ~10 min. Point main at the
-# fast regional mirror (mirror.hoster.kz ~8 MB/s) and security at Debian's own
-# security host, mirroring the host's /etc/apt/sources.list.d/10-hoster-kz.list.
-# Line-anchored matches so the /debian-security URI isn't rewritten by the /debian one.
 RUN sed -i \
-        -e 's|^URIs: http://deb.debian.org/debian$|URIs: http://mirror.hoster.kz/debian|' \
+        -e 's|^URIs: http://deb.debian.org/debian$|URIs: http://mirror.ps.kz/debian|' \
         -e 's|^URIs: http://deb.debian.org/debian-security$|URIs: http://security.debian.org/debian-security|' \
         /etc/apt/sources.list.d/debian.sources && \
     apt-get -o Acquire::Retries=3 update && \
