@@ -317,8 +317,7 @@ RUN mkdir -p /opt/hermes/bin && \
     cp /opt/hermes/docker/python-exec-shim.sh /opt/hermes/bin/python3 && \
     chmod 0755 /opt/hermes /opt/hermes/bin/hermes && \
     chmod 0755 /opt/hermes/bin/python /opt/hermes/bin/python3 && \
-    printf 'docker\n' > /opt/hermes/.install_method && \
-    chmod 0444 /opt/hermes/.install_method
+    printf 'docker\n' > /opt/hermes/.install_method
 # The ``.install_method`` stamp is baked next to the running code (the install
 # tree), NOT into $HERMES_HOME. $HERMES_HOME (/opt/data) is a shared data
 # volume that is commonly bind-mounted from the host and even shared with a
@@ -349,12 +348,11 @@ RUN mkdir -p /opt/hermes/bin && \
 # every published image has it.
 ARG HERMES_GIT_SHA=
 RUN if [ -n "${HERMES_GIT_SHA}" ]; then \
-        printf '%s\n' "${HERMES_GIT_SHA}" > /opt/hermes/.hermes_build_sha && \
-        chmod 0444 /opt/hermes/.hermes_build_sha; \
+        printf '%s\n' "${HERMES_GIT_SHA}" > /opt/hermes/.hermes_build_sha; \
     fi
 
 # ---------- s6-overlay service wiring ----------
-# Static service declared at build time: main-hermes.
+# Static services declared at build time: main-hermes + dashboard.
 # Per-profile gateway services are registered dynamically at runtime by
 # the profile create/delete hooks (Phase 4); they live under
 # /run/service/ (tmpfs) and are reconciled on container restart by

@@ -65,7 +65,6 @@ services:
     command: ["gateway", "run"]
 
   dashboard:
-    profiles: ["dashboard"]
     image: hermes-agent
     container_name: hermes-dashboard
     restart: unless-stopped
