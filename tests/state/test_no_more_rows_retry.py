@@ -132,35 +132,44 @@ class TestNoMoreRowsRetry:
         assert db._execute_write(flaky) == "ok"
         assert calls["n"] == 3
 
-    def test_returned_null_via_system_error_is_retried(self, db):
-        """The live CPython sqlite wrapper surfaces the TrackedConnection
-        failure as built-in SystemError, outside the sqlite3.Error hierarchy."""
+    def test_returned_null_via_system_error_is_not_replayed(self, db):
+        """A bare SystemError is transaction-phase ambiguous and must not
+        replay the callback: the write may already have committed."""
         calls = {"n": 0}
 
-        def flaky(conn):
+        def broken(_conn):
             calls["n"] += 1
-            if calls["n"] <= 2:
-                raise SystemError(
-                    "<TrackedConnection object at 0x7f9dd24350> "
-                    "returned NULL without setting an exception"
-                )
-            conn.execute(
-                "INSERT INTO state_meta (key, value) VALUES ('nullret-system', 'ok') "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+            raise SystemError(
+                "<TrackedConnection object at 0x7f9dd24350> "
+                "returned NULL without setting an exception"
             )
-            return "done"
 
-        assert db._execute_write(flaky) == "done"
-        assert calls["n"] == 3
-        assert db.get_meta("nullret-system") == "ok"
-
-    def test_unrelated_system_error_propagates_immediately(self, db):
-        calls = {"n": 0}
-
-        def broken(conn):
-            calls["n"] += 1
-            raise SystemError("unrelated interpreter failure")
-
-        with pytest.raises(SystemError, match="unrelated interpreter"):
+        with pytest.raises(SystemError, match="returned NULL"):
             db._execute_write(broken)
         assert calls["n"] == 1
+
+    def test_post_commit_system_error_preserves_exactly_once(self, db, monkeypatch):
+        db.create_session("exactly-once", "test")
+        before = db._write_count
+        maintenance_calls = {"n": 0}
+
+        def fail_once(*, max_pages):
+            maintenance_calls["n"] += 1
+            raise SystemError(
+                "<TrackedConnection object at 0x0> returned NULL "
+                "without setting an exception"
+            )
+
+        monkeypatch.setattr(db, "_FTS_MERGE_EVERY_N_WRITES", 1)
+        monkeypatch.setattr(db, "_merge_fts_incrementally", fail_once)
+
+        message_id = db.append_message("exactly-once", "user", "one row")
+        matching = [
+            row for row in db.get_messages("exactly-once")
+            if row["content"] == "one row"
+        ]
+        assert isinstance(message_id, int)
+        assert len(matching) == 1
+        assert db.get_session("exactly-once")["message_count"] == 1
+        assert db._write_count == before + 1
+        assert maintenance_calls["n"] == 1
