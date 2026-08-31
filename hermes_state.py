@@ -5292,7 +5292,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         # SQLite build — some surface it as InterfaceError, which lives
         # OUTSIDE DatabaseError and escaped the retry net entirely on
         # attempt 0 — so the check is message-scoped, not class-scoped.
-        def _is_transient_wal_error(exc: sqlite3.Error) -> bool:
+        def _is_transient_wal_error(exc: BaseException) -> bool:
             # Same contended-WAL-append failure surfaces under different
             # message strings depending on the SQLite build: "no more rows
             # available" (older builds) and "returned NULL without setting an
@@ -5385,6 +5385,15 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                 # subclass) or another sqlite3.Error class outside the two
                 # handlers above. Message-scoped: anything else propagates
                 # untouched.
+                if _is_transient_wal_error(exc) and self._sleep_before_write_retry(deadline, patience_s):
+                    continue
+                raise
+            except SystemError as exc:
+                # CPython's sqlite wrapper can surface this engine-level WAL
+                # failure as the built-in SystemError rather than any
+                # sqlite3.Error subclass. Keep this branch strictly
+                # message-scoped so unrelated interpreter failures are never
+                # hidden or retried.
                 if _is_transient_wal_error(exc) and self._sleep_before_write_retry(deadline, patience_s):
                     continue
                 raise

@@ -131,3 +131,36 @@ class TestNoMoreRowsRetry:
 
         assert db._execute_write(flaky) == "ok"
         assert calls["n"] == 3
+
+    def test_returned_null_via_system_error_is_retried(self, db):
+        """The live CPython sqlite wrapper surfaces the TrackedConnection
+        failure as built-in SystemError, outside the sqlite3.Error hierarchy."""
+        calls = {"n": 0}
+
+        def flaky(conn):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise SystemError(
+                    "<TrackedConnection object at 0x7f9dd24350> "
+                    "returned NULL without setting an exception"
+                )
+            conn.execute(
+                "INSERT INTO state_meta (key, value) VALUES ('nullret-system', 'ok') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+            )
+            return "done"
+
+        assert db._execute_write(flaky) == "done"
+        assert calls["n"] == 3
+        assert db.get_meta("nullret-system") == "ok"
+
+    def test_unrelated_system_error_propagates_immediately(self, db):
+        calls = {"n": 0}
+
+        def broken(conn):
+            calls["n"] += 1
+            raise SystemError("unrelated interpreter failure")
+
+        with pytest.raises(SystemError, match="unrelated interpreter"):
+            db._execute_write(broken)
+        assert calls["n"] == 1
