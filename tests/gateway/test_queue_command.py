@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from gateway.config import GatewayConfig, Platform, PlatformConfig
-from gateway.platforms.event import MessageEvent, MessageType
+from gateway.platforms.event import MessageContextRef, MessageEvent, MessageType
 from gateway.session import SessionEntry, SessionSource, build_session_key
 
 
@@ -133,6 +133,26 @@ async def test_queue_preserves_reply_context():
     assert queued.reply_to_text == "the original message"
     assert queued.reply_to_author_id == "a1"
     assert queued.reply_to_author_name == "alice"
+
+
+@pytest.mark.asyncio
+async def test_queue_preserves_forward_context_refs_without_aliasing():
+    runner, adapter = _make_runner(_session_entry())
+    sk = _running(runner)
+    ref = MessageContextRef(kind="forward", origin_type="user", origin_name="Alice")
+    event = MessageEvent(
+        text="/queue check this",
+        source=_make_source(),
+        message_id="q-forward",
+        context_refs=[ref],
+    )
+
+    result = await runner._handle_message(event)
+
+    assert result is not None and "queued" in result.lower()
+    queued = adapter._pending_messages[sk]
+    assert queued.context_refs == [ref]
+    assert queued.context_refs is not event.context_refs
 
 
 if __name__ == "__main__":  # pragma: no cover

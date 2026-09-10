@@ -13,7 +13,7 @@ import pytest
 
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import SessionSource
-from gateway.platforms.event import MessageEvent, MessageType
+from gateway.platforms.event import MessageContextRef, MessageEvent, MessageType
 from gateway.session import build_session_key
 
 
@@ -102,6 +102,22 @@ class TestTextBatching:
         assert "split by Telegram" in dispatched.text
 
     @pytest.mark.asyncio
+    async def test_split_messages_preserve_forward_context_refs(self):
+        adapter = _make_adapter()
+        first = _make_event("first forwarded chunk")
+        first.context_refs.append(MessageContextRef(kind="forward", origin_name="First"))
+        second = _make_event("second forwarded chunk")
+        second.context_refs.append(MessageContextRef(kind="forward", origin_name="Second"))
+
+        adapter._enqueue_text_event(first)
+        await asyncio.sleep(0.02)
+        adapter._enqueue_text_event(second)
+        await asyncio.sleep(0.2)
+
+        dispatched = adapter.handle_message.call_args[0][0]
+        assert [ref.origin_name for ref in dispatched.context_refs] == ["First", "Second"]
+
+    @pytest.mark.asyncio
     async def test_three_way_split_aggregated(self):
         """Three rapid messages should all merge."""
         adapter = _make_adapter()
@@ -119,6 +135,46 @@ class TestTextBatching:
         assert "chunk 1" in text
         assert "chunk 2" in text
         assert "chunk 3" in text
+
+    @pytest.mark.asyncio
+    async def test_photo_batch_preserves_forward_context_refs(self):
+        adapter = _make_adapter()
+        first = _make_event("first")
+        first.media_urls = ["/tmp/first.jpg"]
+        first.media_types = ["image/jpeg"]
+        first.context_refs.append(MessageContextRef(kind="forward", origin_name="First"))
+        second = _make_event("second")
+        second.media_urls = ["/tmp/second.jpg"]
+        second.media_types = ["image/jpeg"]
+        second.context_refs.append(MessageContextRef(kind="forward", origin_name="Second"))
+
+        adapter._enqueue_photo_event("photo-burst", first)
+        adapter._enqueue_photo_event("photo-burst", second)
+
+        batched = adapter._pending_photo_batches["photo-burst"]
+        assert [ref.origin_name for ref in batched.context_refs] == ["First", "Second"]
+        for task in adapter._pending_photo_batch_tasks.values():
+            task.cancel()
+
+    @pytest.mark.asyncio
+    async def test_media_group_preserves_forward_context_refs(self):
+        adapter = _make_adapter()
+        first = _make_event("first")
+        first.media_urls = ["/tmp/first.jpg"]
+        first.media_types = ["image/jpeg"]
+        first.context_refs.append(MessageContextRef(kind="forward", origin_name="First"))
+        second = _make_event("second")
+        second.media_urls = ["/tmp/second.jpg"]
+        second.media_types = ["image/jpeg"]
+        second.context_refs.append(MessageContextRef(kind="forward", origin_name="Second"))
+
+        await adapter._queue_media_group_event("album-1", first)
+        await adapter._queue_media_group_event("album-1", second)
+
+        batched = adapter._media_group_events["album-1"]
+        assert [ref.origin_name for ref in batched.context_refs] == ["First", "Second"]
+        for task in adapter._media_group_tasks.values():
+            task.cancel()
 
 
     @pytest.mark.asyncio

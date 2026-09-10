@@ -1633,9 +1633,22 @@ class GatewayInboundMixin:
             message_text = await self._expand_inbound_context_references(source, session_key, message_text)
             if message_text is None:
                 return None
-        # After expansion: the quoted reply is someone else's text and stays literal — an
-        # ``@file:`` inside it must never read a local file on the replier's behalf.
-        return self._prepend_inbound_reply_context(event, source, message_text)
+        # Reply context is also untrusted platform text, so add it only after
+        # user-authored @ references have been expanded.  Add it before the
+        # forward envelope so provenance remains the outermost context, as it
+        # was before the inbound pipeline was split out of gateway/run.py.
+        message_text = self._prepend_inbound_reply_context(event, source, message_text)
+        # Provenance is untrusted platform metadata. Render it only after the
+        # user's message has gone through @-reference expansion, so names such
+        # as ``@file:/secret`` cannot trigger local reads.
+        context_refs = getattr(event, "context_refs", None) or []
+        rendered_refs = [
+            rendered for ref in context_refs
+            if ref is not None and (rendered := ref.render())
+        ]
+        if rendered_refs:
+            message_text = "\n\n".join(rendered_refs) + "\n\n" + message_text
+        return message_text
 
     async def _prepare_profile_scoped_inbound_message_text(
         self, *, event: MessageEvent, source: SessionSource, history: List[Dict[str, Any]],

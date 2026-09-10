@@ -902,6 +902,7 @@ class GatewayBusySessionMixin:
                 reply_to_author_id=event.reply_to_author_id,
                 reply_to_author_name=event.reply_to_author_name,
                 reply_to_is_own_message=event.reply_to_is_own_message, auto_skill=event.auto_skill,
+                context_refs=list(getattr(event, "context_refs", []) or []),
                 channel_prompt=event.channel_prompt, channel_context=event.channel_context,
                 internal=event.internal, timestamp=event.timestamp,
             ), adapter)
@@ -926,6 +927,7 @@ class GatewayBusySessionMixin:
                     text=steer_text, message_type=MessageType.TEXT, source=event.source,
                     message_id=event.message_id, channel_prompt=event.channel_prompt,
                     channel_context=event.channel_context,
+                    context_refs=list(getattr(event, "context_refs", []) or []),
                 ), adapter)
             return reply
 

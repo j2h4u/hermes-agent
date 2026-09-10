@@ -146,7 +146,7 @@ from gateway.platforms.base import (
     cache_image_from_bytes_async, cache_audio_from_bytes_async, cache_video_from_bytes_async, resolve_proxy_url, SUPPORTED_VIDEO_TYPES,
     SUPPORTED_DOCUMENT_TYPES, SUPPORTED_IMAGE_DOCUMENT_TYPES, _TEXT_INJECT_EXTENSIONS, utf16_len,
 )
-from gateway.platforms.event import MessageEvent, MessageType, ProcessingOutcome
+from gateway.platforms.event import MessageContextRef, MessageEvent, MessageType, ProcessingOutcome
 from plugins.platforms.telegram.telegram_ids import normalize_telegram_chat_id
 from plugins.platforms.telegram.telegram_network import (
     SEED_FALLBACK_IPS, TelegramFallbackTransport, discover_fallback_ips, parse_fallback_ip_env, tcp_keepalive_socket_options)
@@ -5866,6 +5866,8 @@ class TelegramAdapter(BasePlatformAdapter):
             return
         existing.media_urls.extend(event.media_urls)
         existing.media_types.extend(event.media_types)
+        if getattr(event, "context_refs", None):
+            existing.context_refs.extend(event.context_refs)
         if event.text:
             existing.text = self._merge_caption(existing.text, event.text)
 
@@ -6030,14 +6032,14 @@ class TelegramAdapter(BasePlatformAdapter):
             if self._should_observe_unmentioned_group_message(msg):
                 _event = self._build_message_event(msg, self._media_message_type(msg), update_id=update.update_id)
                 if msg.caption:
-                    _event.text = self._clean_bot_trigger_text(msg.caption)
+                    _event.text = self._clean_bot_trigger_text(self._expand_link_entities(msg))
                 await self._cache_observed_media(msg, _event)
                 self._observe_unmentioned_group_message(msg, _event.message_type, update_id=update.update_id, event=_event)
             return
         event = self._build_message_event(msg, self._media_message_type(msg), update_id=update.update_id)
         if msg.caption:
             from plugins.platforms.telegram.telegram_context import group_trigger_text
-            event.text = group_trigger_text(self, msg, msg.caption)
+            event.text = group_trigger_text(self, msg, self._expand_link_entities(msg))
         # Stickers: _handle_sticker overwrites event.text with its vision description, so observe attribution must run after it.
         if msg.sticker:
             await self._handle_sticker(msg, event)
@@ -6304,6 +6306,116 @@ class TelegramAdapter(BasePlatformAdapter):
                 reply_to_text = None
         return reply_to_id, reply_to_text
 
+    @staticmethod
+    def _expand_link_entities(message: Message) -> str:
+        """Inline Telegram hidden ``text_link`` URLs into text or media captions.
+
+        Telegram entity offsets are UTF-16 code units, while Python indexes are
+        Unicode code points.  Convert both boundaries explicitly and ignore
+        malformed or surrogate-splitting entities.  A marker check keeps a
+        repeated normalization pass idempotent (important when a caption is
+        observed, then routed through a second Telegram path).
+        """
+        text = getattr(message, "text", None)
+        if text:
+            entities = getattr(message, "entities", None) or []
+        else:
+            text = getattr(message, "caption", None) or ""
+            entities = getattr(message, "caption_entities", None) or []
+        if not text or not entities:
+            return text
+
+        def utf16_index(offset: int) -> Optional[int]:
+            units = 0
+            for index, char in enumerate(text):
+                if units == offset:
+                    return index
+                units += 2 if ord(char) > 0xFFFF else 1
+                if units > offset:
+                    return None
+            return len(text) if units == offset else None
+
+        utf16_length = sum(2 if ord(char) > 0xFFFF else 1 for char in text)
+        links: list[tuple[int, int, str, str]] = []
+        for entity in entities:
+            entity_type = str(getattr(entity, "type", "")).split(".")[-1].lower()
+            raw_url = getattr(entity, "url", None)
+            url = raw_url.strip() if isinstance(raw_url, str) else ""
+            if entity_type != "text_link" or not url:
+                continue
+            try:
+                offset = int(getattr(entity, "offset", -1))
+                length = int(getattr(entity, "length", 0))
+            except (TypeError, ValueError):
+                continue
+            if offset < 0 or length <= 0 or offset + length > utf16_length:
+                continue
+            # A repeated pass sees the already-expanded text, while Telegram
+            # still supplies offsets for the original text.  Once every URL
+            # marker is present, return unchanged before recalculating spans
+            # against the shifted string.
+            start, end = utf16_index(offset), utf16_index(offset + length)
+            if start is None or end is None or end <= start:
+                continue
+            anchor = text[start:end]
+            links.append((start, end, url, f"{anchor} ({url})"))
+
+        if links:
+            required = {}
+            for _start, _end, url, _marker in links:
+                required[url] = required.get(url, 0) + 1
+            if all(text.count(f" ({url})") >= count for url, count in required.items()):
+                return text
+
+        expanded = text
+        for start, end, url, marker in sorted(links, key=lambda link: (link[0], link[1]), reverse=True):
+            expanded = f"{expanded[:end]} ({url}){expanded[end:]}"
+        return expanded
+
+    @staticmethod
+    def _forward_context_ref(message) -> Optional[MessageContextRef]:
+        """Normalize PTB ``MessageOrigin*`` data into a platform-neutral ref."""
+        origin = getattr(message, "forward_origin", None)
+        if origin is None:
+            return MessageContextRef(kind="automatic_forward", platform="telegram") if getattr(
+                message, "is_automatic_forward", False
+            ) else None
+
+        origin_type = str(getattr(origin, "type", "") or "").split(".")[-1].lower()
+        ref = MessageContextRef(kind="forward", platform="telegram", date=getattr(origin, "date", None))
+        sender_user = getattr(origin, "sender_user", None)
+        sender_chat = getattr(origin, "sender_chat", None)
+        channel_chat = getattr(origin, "chat", None)
+        sender_user_name = getattr(origin, "sender_user_name", None)
+        if origin_type == "user" or sender_user is not None:
+            ref.origin_type = "user"
+            ref.origin_name = getattr(sender_user, "full_name", None) or getattr(sender_user, "username", None)
+            user_id = getattr(sender_user, "id", None)
+            ref.origin_id = str(user_id) if user_id is not None else None
+            ref.origin_username = getattr(sender_user, "username", None)
+        elif origin_type == "hidden_user" or sender_user_name:
+            ref.origin_type = "hidden_user"
+            ref.origin_name = sender_user_name
+            ref.is_confidence_limited = True
+        elif origin_type == "chat" or sender_chat is not None:
+            ref.origin_type = "chat"
+            ref.origin_chat = getattr(sender_chat, "title", None) or getattr(sender_chat, "full_name", None)
+            chat_id = getattr(sender_chat, "id", None)
+            ref.origin_id = str(chat_id) if chat_id is not None else None
+            ref.origin_name = getattr(origin, "author_signature", None)
+        elif origin_type == "channel" or channel_chat is not None:
+            ref.origin_type = "channel"
+            ref.origin_chat = getattr(channel_chat, "title", None) or getattr(channel_chat, "full_name", None)
+            chat_id = getattr(channel_chat, "id", None)
+            ref.origin_id = str(chat_id) if chat_id is not None else None
+            message_id = getattr(origin, "message_id", None)
+            ref.origin_message_id = str(message_id) if message_id is not None else None
+            ref.origin_name = getattr(origin, "author_signature", None)
+        else:
+            ref.origin_type = origin_type or None
+            ref.is_confidence_limited = True
+        return ref
+
     def _build_message_event(self, message: Message, msg_type: MessageType, update_id: Optional[int] = None) -> MessageEvent:
         """Build a MessageEvent from a Telegram message. ``update_id`` lets ``/restart`` record the
         triggering offset so the new gateway process advances past it."""
@@ -6333,14 +6445,19 @@ class TelegramAdapter(BasePlatformAdapter):
             user_name=user_name, thread_id=thread_id_str, chat_topic=chat_topic, message_id=str(message.message_id),
             is_bot=bool(getattr(user, "is_bot", False)) if user else False)
         reply_to_id, reply_to_text = self._reply_context(message)
+        context_refs: list[MessageContextRef] = []
+        forward_ref = self._forward_context_ref(message)
+        if forward_ref is not None:
+            context_refs.append(forward_ref)
         from gateway.platforms.base import resolve_channel_prompt  # per-channel/topic ephemeral prompt
         from plugins.platforms.telegram.telegram_context import group_identity_prompt
         _chat_id_str = str(chat.id)
         channel_prompt = resolve_channel_prompt(self.config.extra, thread_id_str or _chat_id_str, _chat_id_str if thread_id_str else None)
         return MessageEvent(
-            text=message.text or "", message_type=msg_type, source=source, raw_message=message,
+            text=self._expand_link_entities(message), message_type=msg_type, source=source, raw_message=message,
             message_id=str(message.message_id), platform_update_id=update_id,
-            reply_to_message_id=reply_to_id, reply_to_text=reply_to_text, auto_skill=topic_skill,
+            reply_to_message_id=reply_to_id, reply_to_text=reply_to_text, context_refs=context_refs,
+            auto_skill=topic_skill,
             channel_prompt=group_identity_prompt(self, message, channel_prompt),
             timestamp=message.date)
 
