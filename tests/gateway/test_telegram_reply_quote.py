@@ -24,6 +24,7 @@ def _make_message(
     reply_to_caption=None,
     reply_to_id=42,
     quote_text=None,
+    reply_to_forum_topic_created=None,
 ):
     chat = SimpleNamespace(id=111, type="private", title=None, full_name="Alice")
     user = SimpleNamespace(id=42, full_name="Alice")
@@ -34,6 +35,7 @@ def _make_message(
             message_id=reply_to_id,
             text=reply_to_text,
             caption=reply_to_caption,
+            forum_topic_created=reply_to_forum_topic_created,
         )
 
     quote = None
@@ -71,4 +73,19 @@ def test_native_partial_quote_used_as_reply_to_text():
     assert event.reply_to_text == "Item B: rotate keys"
     assert event.reply_to_message_id == "42"
 
+
+def test_dm_topic_seed_is_not_treated_as_user_reply():
+    from gateway.platforms.event import MessageType
+
+    adapter = _make_adapter()
+    msg = _make_message(
+        text="message inside topic",
+        reply_to_text="Topic created",
+        reply_to_forum_topic_created=SimpleNamespace(name="Inbox"),
+    )
+
+    event = adapter._build_message_event(msg, MessageType.TEXT)
+
+    assert event.reply_to_message_id is None
+    assert event.reply_to_text is None
 
