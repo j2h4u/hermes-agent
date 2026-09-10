@@ -431,7 +431,7 @@ from gateway.platforms.base_exec_approval import (
     ea_reason_label_text, ea_smart_deny_line_text, format_approval_deadline_line)
 from gateway.platforms.base_streaming_tts import (
     AudioFormat, StreamingTTSHandle, streaming_tts_should_skip_whole_file, streaming_tts_turn_key)
-from gateway.platforms.event import MessageEvent, MessageType, ProcessingOutcome
+from gateway.platforms.event import MessageContextRef, MessageEvent, MessageType, ProcessingOutcome
 from gateway.warning_notifications import diagnostic_wake_muted
 from hermes_cli.observability.shared_metrics_gateway import records_delivery, stop_reply_clock
 from gateway.session import SessionSource, build_session_key
@@ -1769,6 +1769,8 @@ def merge_pending_message_event(pending_messages: dict[str, MessageEvent], sessi
             if event.text:
                 existing.text = BasePlatformAdapter._merge_caption(existing.text, event.text)
             existing.absorb_reply_expected(event)
+            if getattr(event, "context_refs", None):
+                existing.context_refs.extend(event.context_refs)
             if existing_is_photo or incoming_is_photo:
                 existing.message_type = MessageType.PHOTO
             elif existing_type == MessageType.TEXT and event.message_type != MessageType.TEXT:
@@ -1784,6 +1786,8 @@ def merge_pending_message_event(pending_messages: dict[str, MessageEvent], sessi
             if event.text:
                 existing.text = _append_text(existing.text, event.text)
             existing.absorb_reply_expected(event)
+            if getattr(event, "context_refs", None):
+                existing.context_refs.extend(event.context_refs)
             return
     pending_messages[session_key] = event
 
@@ -2531,6 +2535,8 @@ class BasePlatformAdapter(ABC):
         else:
             if event.text:
                 existing.text = _append_text(existing.text, event.text)
+            if getattr(event, "context_refs", None):
+                existing.context_refs.extend(event.context_refs)
             if event.media_urls:
                 existing.media_urls.extend(event.media_urls)
                 existing.media_types.extend(event.media_types)
@@ -3819,6 +3825,8 @@ class BasePlatformAdapter(ABC):
             if event.text:
                 state.event.text = _append_text(state.event.text, event.text)
             state.event.absorb_reply_expected(event)
+            if getattr(event, "context_refs", None):
+                state.event.context_refs.extend(event.context_refs)
             latest_message_id = getattr(event, "message_id", None)
             latest_anchor = latest_message_id or getattr(event, "reply_to_message_id", None)
             if latest_message_id is not None:

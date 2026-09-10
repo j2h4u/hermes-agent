@@ -35,6 +35,7 @@ from gateway.platforms.base import (
     SendResult,
 )
 from gateway.platforms.event import MessageEvent, MessageType
+from gateway.platforms.event import MessageContextRef
 from gateway.session import SessionSource, build_session_key
 
 
@@ -186,6 +187,25 @@ async def test_rapid_text_followups_accumulate_instead_of_replacing():
     pending = adapter._pending_messages[session_key]
     assert pending.text == "part two\npart three"
     assert not adapter._active_sessions[session_key].is_set()
+
+
+@pytest.mark.asyncio
+async def test_active_text_followups_accumulate_forward_context_refs():
+    adapter = _make_adapter()
+    adapter._busy_text_mode = ""  # direct-merge behavior, no debounce
+    first = _make_event("part one")
+    session_key = build_session_key(first.source)
+    adapter._active_sessions[session_key] = asyncio.Event()
+
+    second = _make_event("part two")
+    second.context_refs.append(MessageContextRef(kind="forward", origin_name="Second"))
+    third = _make_event("part three")
+    third.context_refs.append(MessageContextRef(kind="forward", origin_name="Third"))
+    await adapter.handle_message(second)
+    await adapter.handle_message(third)
+
+    pending = adapter._pending_messages[session_key]
+    assert [ref.origin_name for ref in pending.context_refs] == ["Second", "Third"]
 
 
 @pytest.mark.asyncio
