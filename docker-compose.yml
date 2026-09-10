@@ -28,7 +28,11 @@
 #
 services:
   gateway:
-    build: .
+    build:
+      context: .
+      args:
+        HERMES_BUILD_UID: ${HERMES_UID:-10000}
+        HERMES_BUILD_GID: ${HERMES_GID:-10000}
     image: hermes-agent
     container_name: hermes
     restart: unless-stopped
@@ -61,6 +65,7 @@ services:
     command: ["gateway", "run"]
 
   dashboard:
+    profiles: ["dashboard"]
     image: hermes-agent
     container_name: hermes-dashboard
     restart: unless-stopped
