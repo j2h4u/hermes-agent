@@ -135,15 +135,15 @@ class FileSyncManager:
         self._last_sync_time: float = 0.0  # monotonic; 0 ensures first sync runs
         self._sync_interval = sync_interval
 
-    def sync(self, *, force: bool = False) -> None:
+    def sync(self, *, force: bool = False, raise_on_error: bool = False) -> None:
         """Run a sync cycle: upload changed files, delete removed files. Rate-limited to once
         per ``sync_interval`` unless *force* or ``HERMES_FORCE_FILE_SYNC=1``. Transactional:
         state is committed only if ALL operations succeed; on failure it rolls back so the
         next cycle retries everything."""
         with self._transaction_lock:
-            self._sync_transaction(force=force)
+            self._sync_transaction(force=force, raise_on_error=raise_on_error)
 
-    def _sync_transaction(self, *, force: bool = False) -> None:
+    def _sync_transaction(self, *, force: bool = False, raise_on_error: bool = False) -> None:
         """Execute one sync cycle while holding the per-manager lock."""
         if (
             not force
@@ -186,6 +186,8 @@ class FileSyncManager:
             # Do NOT advance _last_sync_time: bumping the rate-limit clock on failure would
             # suppress the retry for up to _sync_interval, contradicting the retry contract.
             logger.warning("file_sync: sync failed, rolled back state: %s", exc)
+            if raise_on_error:
+                raise
 
     def _plan_sync(
         self, current_files: list[tuple[str, str]]
