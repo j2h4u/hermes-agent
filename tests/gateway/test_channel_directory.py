@@ -90,6 +90,33 @@ class TestBuildChannelDirectoryWrites:
             {"id": "family_1", "name": "达拉崩吧", "type": "group"},
         ]
 
+    def test_telegram_dm_topics_are_available_as_send_targets(self, tmp_path, monkeypatch):
+        adapter = SimpleNamespace(_dm_topics_config=[], _dm_topics={})
+        monkeypatch.setattr(
+            "gateway.channel_directory._load_configured_telegram_dm_topics",
+            lambda: [{
+                "chat_id": 591994976,
+                "name": "Personal",
+                "topics": [{"name": "Reports", "thread_id": 306001}],
+            }],
+        )
+        monkeypatch.setattr(
+            "gateway.channel_directory._build_from_sessions", lambda _platform: []
+        )
+
+        cache_file = tmp_path / "channel_directory.json"
+        with patch("gateway.channel_directory.DIRECTORY_PATH", cache_file):
+            directory = asyncio.run(
+                build_channel_directory({Platform.TELEGRAM: adapter})
+            )
+
+        assert directory["platforms"]["telegram"] == [{
+            "id": "591994976:306001",
+            "name": "Personal / Reports",
+            "type": "dm_topic",
+            "thread_id": "306001",
+        }]
+
 
 class TestBuildChannelDirectoryOffload:
     def test_discord_builder_runs_off_event_loop_thread(self, tmp_path):
@@ -397,4 +424,3 @@ class TestChannelAliases:
         names = [e["name"] for e in on_disk["platforms"]["whatsapp"]
                  if e["id"] == "120363@g.us"]
         assert names == ["general"]
-

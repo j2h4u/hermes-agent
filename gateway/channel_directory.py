@@ -9,6 +9,7 @@ import contextlib
 import json
 import logging
 import time
+import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -142,6 +143,8 @@ async def build_channel_directory(adapters: Dict[Any, Any]) -> Dict[str, Any]:
                     continue
             if platform == Platform.DISCORD:
                 platforms["discord"] = await asyncio.to_thread(_build_discord, adapter)
+            elif platform == Platform.TELEGRAM:
+                platforms["telegram"] = await asyncio.to_thread(_build_telegram, adapter)
             elif platform == Platform.SLACK:
                 platforms["slack"] = await _build_slack(adapter)
         except Exception as e:
@@ -188,6 +191,50 @@ def _build_discord(adapter) -> List[Dict[str, str]]:
                 channels.append({"id": str(ch.id), "name": ch.name, "guild": guild.name, "type": ch_type})
     # DM-capable users aren't reachable via guild enumeration; they come from sessions.
     channels.extend(_build_from_sessions("discord"))
+    return channels
+
+
+def _load_configured_telegram_dm_topics() -> List[Dict[str, Any]]:
+    config_path = get_hermes_home() / "config.yaml"
+    if not config_path.exists():
+        return []
+    try:
+        with open(config_path, encoding="utf-8") as stream:
+            config = yaml.safe_load(stream) or {}
+    except Exception as exc:
+        logger.debug("Channel directory: failed to read Telegram dm_topics config: %s", exc)
+        return []
+    topics = config.get("platforms", {}).get("telegram", {}).get("extra", {}).get("dm_topics", [])
+    return topics if isinstance(topics, list) else []
+
+
+def _add_telegram_dm_topics(channels: List[Dict[str, Any]], seen_ids: set[str], config: Any) -> None:
+    for chat_entry in config if isinstance(config, list) else ():
+        if not isinstance(chat_entry, dict) or not chat_entry.get("chat_id"):
+            continue
+        chat_id = str(chat_entry["chat_id"])
+        chat_name = str(chat_entry.get("name") or chat_id)
+        for topic in chat_entry.get("topics", ()) or ():
+            if not isinstance(topic, dict) or not topic.get("name") or not topic.get("thread_id"):
+                continue
+            thread_id = str(topic["thread_id"])
+            entry_id = f"{chat_id}:{thread_id}"
+            if entry_id not in seen_ids:
+                channels.append({"id": entry_id, "name": f"{chat_name} / {topic['name']}",
+                                 "type": "dm_topic", "thread_id": thread_id})
+                seen_ids.add(entry_id)
+
+
+def _build_telegram(adapter) -> List[Dict[str, Any]]:
+    channels: List[Dict[str, Any]] = list(_build_from_sessions("telegram"))
+    seen_ids = {str(item.get("id")) for item in channels if item.get("id")}
+    _add_telegram_dm_topics(channels, seen_ids, _load_configured_telegram_dm_topics())
+    _add_telegram_dm_topics(channels, seen_ids, getattr(adapter, "_dm_topics_config", None))
+    for cache_key, thread_id in (getattr(adapter, "_dm_topics", None) or {}).items():
+        if thread_id and ":" in cache_key:
+            chat_id, topic_name = cache_key.split(":", 1)
+            _add_telegram_dm_topics(channels, seen_ids, [{"chat_id": chat_id,
+                "topics": [{"name": topic_name, "thread_id": thread_id}]}])
     return channels
 
 

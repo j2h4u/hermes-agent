@@ -6284,6 +6284,8 @@ class TelegramAdapter(BasePlatformAdapter):
         first, then text/caption, rich echo, then the sent index."""
         if not message.reply_to_message:
             return None, None
+        if getattr(message.reply_to_message, "forum_topic_created", None):
+            return None, None
         reply_to_id = str(message.reply_to_message.message_id)
         quote = getattr(message, "quote", None)
         quote_text = getattr(quote, "text", None) if quote is not None else None
