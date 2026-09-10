@@ -31,7 +31,7 @@ from hermes_state_common import escape_like as _escape_like, stat_db_file_identi
 from hermes_state_errors import (
     _DELETED_WAL_GENERATION_MSG, _DISK_IO_ERROR_MARKER, _STATE_DB_CORRUPT_MSG, _STATE_DB_GENERATION_KEY,
     _STATE_DB_REPLACED_MSG, DeletedWalGenerationError, SessionCompressionInProgressError, StateDbCorruptError,
-    StateDbReplacedError, _is_no_more_rows, classify_persistence_error, is_malformed_db_error,
+    StateDbReplacedError, _is_transient_wal_error, classify_persistence_error, is_malformed_db_error,
     is_malformed_schema_error,
 )
 from hermes_state_guard import (
@@ -795,20 +795,27 @@ class SessionDB(
             self._raise_if_db_corrupt()
             self._raise_if_db_replaced()
             fn_started = False
+            transaction_phase = "begin"
+            rollback_succeeded = False
             try:
                 with self._lock:
                     if self._conn is None:  # close() raced this writer
                         self._reopen_after_close_locked(context="write")
                     self._conn.execute("BEGIN IMMEDIATE")
                     try:
+                        transaction_phase = "callback"
                         fn_started = True
                         result = fn(self._conn)
+                        transaction_phase = "commit"
                         self._conn.commit()
+                        transaction_phase = "post_commit"
                     except BaseException:
                         try:
                             self._conn.rollback()
                         except Exception:
                             pass
+                        else:
+                            rollback_succeeded = True
                         raise
                 # Success — periodic best-effort checkpoint + FTS merge.
                 self._write_count += 1
@@ -834,10 +841,21 @@ class SessionDB(
                     continue
                 raise
             except sqlite3.Error as exc:
-                # 'no more rows' is a transient engine error on contended WAL appends (some builds
-                # raise it as InterfaceError, a sibling of DatabaseError): retry like locked/busy.
-                if _is_no_more_rows(exc) and self._sleep_before_write_retry(deadline, patience_s):
-                    continue
+                # SQLite builds spell one contended-WAL append failure either as
+                # 'no more rows available' or 'returned NULL without setting an
+                # exception'. Never let this marker reach the FTS-corruption
+                # handlers: that would conflate an engine race with damaged
+                # shadow tables. A retry is safe before the callback starts, or
+                # after a callback failure whose rollback completed. A marker
+                # during/after COMMIT is ambiguous and must propagate because
+                # replaying the callback could duplicate a durable record.
+                if _is_transient_wal_error(exc):
+                    retry_safe = transaction_phase == "begin" or (
+                        transaction_phase == "callback" and rollback_succeeded
+                    )
+                    if retry_safe and self._sleep_before_write_retry(deadline, patience_s):
+                        continue
+                    raise
                 err_msg = str(exc).lower()
                 if isinstance(exc, sqlite3.OperationalError):
                     if "locked" in err_msg or "busy" in err_msg:
@@ -875,6 +893,18 @@ class SessionDB(
                     # What survives both checks is structural damage: quarantine.
                     if self._is_structural_corruption_error(exc):
                         self._halt_db_corrupt(exc)
+                raise
+            except SystemError as exc:
+                # The tracked sqlite wrapper may emit the same marker outside
+                # sqlite3.Error. Only a failure before callback admission is
+                # replay-safe; once callback/COMMIT began, settlement is not
+                # knowable and the write must not be repeated.
+                if _is_transient_wal_error(exc):
+                    if transaction_phase == "begin" and self._sleep_before_write_retry(
+                        deadline, patience_s
+                    ):
+                        continue
+                    raise
                 raise
 
     def _write_sql(

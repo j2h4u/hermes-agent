@@ -33,10 +33,29 @@ _TRANSIENT_SQLITE_MARKERS = (
 )
 
 
+_TRANSIENT_WAL_MARKERS = (
+    "no more rows available",
+    "returned null without setting an exception",
+)
+
+
+def _is_transient_wal_error(exc: BaseException) -> bool:
+    """Classify SQLite's contended-WAL append spellings without class coupling.
+
+    SQLite and its tracked-connection wrapper surface the same transient
+    engine condition as either a ``sqlite3.Error`` subclass or built-in
+    ``SystemError``.  The text marker is deliberately narrower than generic
+    corruption/busy matching; the write path applies the transaction-phase
+    safety gate before retrying it.
+    """
+    return isinstance(exc, (sqlite3.Error, SystemError)) and any(
+        marker in str(exc).lower() for marker in _TRANSIENT_WAL_MARKERS
+    )
+
+
 def _is_no_more_rows(exc: sqlite3.Error) -> bool:
-    """Transient engine error on contended WAL appends (retries like locked/busy);
-    message-scoped because some builds raise it as InterfaceError."""
-    return "no more rows available" in str(exc).lower()
+    """Backward-compatible narrow predicate for the older WAL spelling."""
+    return isinstance(exc, sqlite3.Error) and "no more rows available" in str(exc).lower()
 
 
 def is_transient_sqlite_error(exc: BaseException) -> bool:
