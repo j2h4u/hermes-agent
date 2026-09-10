@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from gateway.config import GatewayConfig, Platform, PlatformConfig
-from gateway.platforms.event import MessageEvent
+from gateway.platforms.event import MessageContextRef, MessageEvent
 from gateway.session import SessionEntry, SessionSource, build_session_key
 
 
@@ -160,9 +160,9 @@ async def test_steer_agent_without_steer_method_falls_back():
     running_agent = MagicMock(spec=[])
     runner._running_agents[sk] = running_agent
 
-    result = await runner._handle_message(
-        _make_event("/steer fallback", channel_context="[Thread context]\nAlice: earlier request")
-    )
+    event = _make_event("/steer fallback", channel_context="[Thread context]\nAlice: earlier request")
+    event.context_refs.append(MessageContextRef(kind="forward", origin_name="Forwarded author"))
+    result = await runner._handle_message(event)
 
     assert result is not None
     # Must mention queueing since steer wasn't available
@@ -173,6 +173,10 @@ async def test_steer_agent_without_steer_method_falls_back():
         adapter._pending_messages[sk].channel_context
         == "[Thread context]\nAlice: earlier request"
     )
+    assert [ref.origin_name for ref in adapter._pending_messages[sk].context_refs] == [
+        "Forwarded author"
+    ]
+    assert adapter._pending_messages[sk].context_refs is not event.context_refs
 
 
 if __name__ == "__main__":  # pragma: no cover
