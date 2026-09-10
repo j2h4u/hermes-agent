@@ -7,6 +7,7 @@ gateway.platforms.*.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+import re
 from typing import Any, Dict, List, Optional
 
 from gateway.session import SessionSource
@@ -30,6 +31,82 @@ class ProcessingOutcome(Enum):
     SUCCESS = "success"
     FAILURE = "failure"
     CANCELLED = "cancelled"
+
+
+@dataclass
+class MessageContextRef:
+    """Platform-neutral provenance attached to an inbound message.
+
+    Adapters normalize forwarding metadata here; the gateway renders it only
+    after user-authored context references have been expanded.  This keeps
+    untrusted names and channel titles from becoming ``@file``/``@url`` input.
+    """
+
+    kind: str
+    platform: Optional[str] = None
+    origin_type: Optional[str] = None
+    origin_name: Optional[str] = None
+    origin_id: Optional[str] = None
+    origin_username: Optional[str] = None
+    origin_chat: Optional[str] = None
+    origin_message_id: Optional[str] = None
+    date: Optional[datetime] = None
+    text: Optional[str] = None
+    is_confidence_limited: bool = False
+
+    @staticmethod
+    def _render_field(value: object, *, max_len: int = 200) -> str:
+        text = str(value or "")
+        text = re.sub(r"[\r\n\t]+", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) > max_len:
+            return text[: max_len - 1].rstrip() + "…"
+        return text
+
+    def render(self) -> str:
+        """Render compact, deterministic provenance suitable for model input."""
+        header = "[Forwarded message (automatic)]" if self.kind == "automatic_forward" else "[Forwarded message]"
+        lines = [header]
+        if self.origin_type == "user":
+            who = self._render_field(self.origin_name) or "Unknown user"
+            extras = []
+            if self.origin_username:
+                # Do not emit a literal @: provenance is rendered after @-ref expansion.
+                extras.append(f"username {self._render_field(self.origin_username)}")
+            if self.origin_id:
+                extras.append(f"id {self._render_field(self.origin_id)}")
+            lines.append(f"From: {who}" + (f" ({', '.join(extras)})" if extras else ""))
+        elif self.origin_type == "hidden_user":
+            who = self._render_field(self.origin_name) or "Hidden user"
+            lines.append(f"From: {who} (sender identity hidden)")
+        elif self.origin_type == "chat":
+            chat = self._render_field(self.origin_chat or self.origin_name) or "Unknown chat"
+            suffix = f" (id {self._render_field(self.origin_id)})" if self.origin_id else ""
+            lines.append(f"From chat: {chat}{suffix}")
+            if self.origin_name:
+                lines.append(f"Author: {self._render_field(self.origin_name)}")
+        elif self.origin_type == "channel":
+            channel = self._render_field(self.origin_chat) or "Unknown channel"
+            extras = []
+            if self.origin_id:
+                extras.append(f"id {self._render_field(self.origin_id)}")
+            if self.origin_message_id:
+                extras.append(f"message {self._render_field(self.origin_message_id)}")
+            lines.append(f"From channel: {channel}" + (f" ({', '.join(extras)})" if extras else ""))
+            if self.origin_name:
+                lines.append(f"Author: {self._render_field(self.origin_name)}")
+        elif self.origin_name or self.origin_chat:
+            lines.append(f"From: {self._render_field(self.origin_name or self.origin_chat)}")
+        if self.date is not None:
+            try:
+                lines.append(f"Date: {self.date.isoformat()}")
+            except Exception:
+                pass
+        if self.text:
+            lines.append(f'Quoted: "{self._render_field(self.text, max_len=500)}"')
+        if self.is_confidence_limited:
+            lines.append("(Origin attribution is limited — the sender restricts forward attribution, so identity cannot be fully verified.)")
+        return "\n".join(lines)
 
 
 @dataclass
@@ -65,6 +142,8 @@ class MessageEvent:
     reply_to_author_id: Optional[str] = None
     reply_to_author_name: Optional[str] = None
     reply_to_is_own_message: bool = False  # True when the user replied to this bot/assistant's message
+    # Normalized platform provenance, e.g. Telegram forwarded-message origin.
+    context_refs: List[MessageContextRef] = field(default_factory=list)
     # Structured interactive-prompt reply (relay only): {prompt_id, option_id, label?,
     # prompt_message_id?}; routed to the approval/slash-confirm/clarify resolvers BEFORE dispatch.
     prompt_response: Optional[Dict[str, Any]] = None
