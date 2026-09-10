@@ -7,7 +7,11 @@
 FROM debian:13.4@sha256:e2d08da6f42ef4b09b165d55528a12727aeed8240dc9edf888e3ec07e10ef9da AS sqlite_build
 ARG SQLITE_AUTOCONF_VERSION=3530400
 ARG SQLITE_SHA256=0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c
-RUN apt-get -o Acquire::Retries=3 update && \
+RUN sed -i \
+        -e 's|^URIs: http://deb.debian.org/debian$|URIs: http://mirror.ps.kz/debian|' \
+        -e 's|^URIs: http://deb.debian.org/debian-security$|URIs: http://security.debian.org/debian-security|' \
+        /etc/apt/sources.list.d/debian.sources && \
+    apt-get -o Acquire::Retries=3 update && \
     apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
         build-essential ca-certificates curl && \
     rm -rf /var/lib/apt/lists/* && \
@@ -73,7 +77,11 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/tools
 # must be declared here. The list is the `ldd ... | grep "not found"` set of
 # the pinned chrome binary in this base image, mapped to trixie package
 # names (see .hermes/plans/termux-removal-commit-spec.md).
-RUN apt-get -o Acquire::Retries=3 update && \
+RUN sed -i \
+        -e 's|^URIs: http://deb.debian.org/debian$|URIs: http://mirror.ps.kz/debian|' \
+        -e 's|^URIs: http://deb.debian.org/debian-security$|URIs: http://security.debian.org/debian-security|' \
+        /etc/apt/sources.list.d/debian.sources && \
+    apt-get -o Acquire::Retries=3 update && \
     apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
     ca-certificates curl iputils-ping python3 python-is-python3 gcc g++ make cmake python3-dev python3-venv libffi-dev libolm-dev libatomic1 procps git openssh-client docker-cli xz-utils \
     libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 && \
@@ -171,8 +179,22 @@ RUN set -eu; \
 # updated.
 COPY --chmod=0755 docker/tini-shim.sh /usr/bin/tini
 
-# Non-root user for runtime; UID can be overridden via HERMES_UID at runtime
-RUN useradd -u 10000 -m -d /opt/data hermes
+# Non-root user for runtime. Local self-hosted images may bake the same UID/GID
+# as the owner of ~/.hermes, avoiding an identity remap at startup. This never
+# changes /opt/hermes ownership: startup intentionally reconciles writable
+# /opt/data state only. Published images keep the 10000:10000 default and can
+# still be remapped at runtime with HERMES_UID/HERMES_GID.
+ARG HERMES_BUILD_UID=10000
+ARG HERMES_BUILD_GID=10000
+RUN set -eu; \
+    for build_id in "$HERMES_BUILD_UID" "$HERMES_BUILD_GID"; do \
+        case "$build_id" in ''|*[!0-9]*) echo "HERMES build UID/GID must be numeric" >&2; exit 1 ;; esac; \
+        if [ "$build_id" -lt 1 ] || [ "$build_id" -gt 65534 ]; then \
+            echo "HERMES build UID/GID must be in 1..65534" >&2; exit 1; \
+        fi; \
+    done; \
+    groupadd -o -g "$HERMES_BUILD_GID" hermes && \
+    useradd -o -u "$HERMES_BUILD_UID" -g "$HERMES_BUILD_GID" -m -d /opt/data hermes
 
 
 WORKDIR /opt/hermes
@@ -276,7 +298,7 @@ RUN touch ./README.md
 RUN python3 -m pm.build_env --source /opt/hermes --python /usr/local/bin/python3 \
     --out /opt/hermes/.venv --no-install-project --sealed \
     --extra all --extra messaging --extra otlp --extra anthropic --extra bedrock \
-    --extra azure-identity --extra matrix --extra google-chat
+    --extra azure-identity --extra matrix --extra google-chat --extra firecrawl --extra exa --extra edge-tts
 
 # Icons render on the runtime environment: Pillow and resvg-py are core
 # dependencies. A stage of its own so the frontend stage keeps building its
@@ -354,14 +376,16 @@ COPY --link --chmod=a+rX,go-w . .
 # The shared assembler binds the prepared environment and frontend products.
 RUN /opt/hermes/.venv/bin/python -m docker.build_agent
 
-# Wire the exec shim and install-method stamp.  Files under /opt/hermes are
+# Wire the exec shims and install-method stamp. Files under /opt/hermes are
 # already root-owned (COPY, dep assembly, npm install all run as root) and
 # read-only for the hermes user (go-w from the --chmod above).
-
 USER root
 RUN mkdir -p /opt/hermes/bin && \
     cp /opt/hermes/docker/hermes-exec-shim.sh /opt/hermes/bin/hermes && \
+    cp /opt/hermes/docker/python-exec-shim.sh /opt/hermes/bin/python && \
+    cp /opt/hermes/docker/python-exec-shim.sh /opt/hermes/bin/python3 && \
     chmod 0755 /opt/hermes /opt/hermes/bin/hermes && \
+    chmod 0755 /opt/hermes/bin/python /opt/hermes/bin/python3 && \
     printf 'docker\n' > /opt/hermes/.install_method
 # The ``.install_method`` stamp is baked next to the running code (the install
 # tree), NOT into $HERMES_HOME. $HERMES_HOME (/opt/data) is a shared data
@@ -458,18 +482,18 @@ ENV HERMES_WRITE_SAFE_ROOT=/opt/data
 # for one lock. Container-scoped instead; seeded 0700 by docker/stage2-hook.sh.
 ENV XDG_RUNTIME_DIR=/tmp/hermes-runtime
 
-# `docker exec` privilege-drop shim. When operators run
-# `docker exec <c> hermes ...` they default to root, and any file the
-# command writes under $HERMES_HOME (auth.json, .env, config.yaml) ends
-# up root-owned and unreadable to the supervised gateway (UID 10000).
-# The shim lives at /opt/hermes/bin/hermes, sits earliest on PATH, and
-# transparently re-exec's the real venv binary via `s6-setuidgid hermes`
-# when invoked as root. Non-root callers (supervised processes,
-# `--user hermes`, etc.) hit the short-circuit path with no overhead.
-# Recursion is impossible because the shim exec's the venv binary by
-# absolute path (/opt/hermes/.venv/bin/hermes). See the shim source for
-# the opt-out env var (HERMES_DOCKER_EXEC_AS_ROOT=1).
+# `docker exec` privilege-drop shims. When operators run
+# `docker exec <c> hermes ...` or `docker exec <c> python3 ...` they default
+# to root, and any file the command writes under $HERMES_HOME (auth.json,
+# .env, config.yaml, cron/jobs.json) ends up root-owned and unreadable to the
+# supervised gateway. These shims live at /opt/hermes/bin/*, sit earliest on
+# PATH, and transparently re-exec the real venv binary via `s6-setuidgid
+# hermes` when invoked as root. Non-root callers hit the short-circuit path
+# with no overhead. See the shim sources for the opt-out env var
+# (HERMES_DOCKER_EXEC_AS_ROOT=1).
 COPY --chmod=0755 docker/hermes-exec-shim.sh /opt/hermes/bin/hermes
+COPY --chmod=0755 docker/python-exec-shim.sh /opt/hermes/bin/python
+COPY --chmod=0755 docker/python-exec-shim.sh /opt/hermes/bin/python3
 COPY --chmod=0755 docker/entrypoint-dispatch.sh /opt/hermes/docker/entrypoint-dispatch.sh
 
 # Pre-s6 entrypoint.sh did `source .venv/bin/activate` which exported
