@@ -234,6 +234,17 @@ class TestTransactionalRollback:
         mgr.sync(force=True)
         assert upload.call_count == 0, "the retry confirms the unchanged bytes instead of re-uploading"
 
+    def test_sync_can_surface_failure_after_rollback(self, tmp_files):
+        mgr = _make_manager(
+            tmp_files,
+            upload=MagicMock(side_effect=RuntimeError("transport down")),
+        )
+
+        with pytest.raises(RuntimeError, match="transport down"):
+            mgr.sync(force=True, raise_on_error=True)
+
+        assert mgr._synced_files == {}
+
 
 class TestRateLimiting:
     def test_sync_skipped_within_interval(self, tmp_files):
