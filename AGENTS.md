@@ -217,6 +217,48 @@ hermes-agent/
 `~/.hermes/logs/` (`agent.log` INFO+, `errors.log` WARNING+, `gateway.log`); all
 profile-aware via `get_hermes_home()`. Browse logs with `hermes logs [--follow] [--level] [--session]`.
 
+## Local Deploy Notes
+
+The local deploy checkout's `deploy` branch tracks `origin/deploy`; upstream
+code comes from `upstream/main`. Keep those remotes distinct when checking for
+updates:
+
+```bash
+git fetch upstream main
+git fetch origin deploy
+```
+
+Do not run `git fetch upstream origin`: `origin` is a refspec for the `upstream`
+remote, not the remote to update.
+
+The production Compose project is `/opt/docker/hermes-agent`; do not substitute
+the repository checkout's Compose file for it. For a later, explicitly approved
+RC build/deploy wave, select the RC checkout and verify the approved source
+revision before any build or deployment command:
+
+```bash
+export HERMES_SOURCE_DIR=/home/j2h4u/repos/j2h4u/hermes-agent-rc-v2026.9.7-20260908
+export EXPECTED_HERMES_GIT_SHA=<approved-RC-SHA>
+test "$(git -C "$HERMES_SOURCE_DIR" status --porcelain)" = ""
+test "$(git -C "$HERMES_SOURCE_DIR" rev-parse HEAD)" = "$EXPECTED_HERMES_GIT_SHA"
+```
+
+Only then may the separately approved workflow use
+`HERMES_SOURCE_DIR="$HERMES_SOURCE_DIR" /opt/docker/hermes-agent/build.sh`.
+Do not run that build, a restart, or a redeploy as part of ordinary source work.
+
+The live deployment is Telegram-first. The Compose dashboard is now an opt-in
+profile, so the default remains gateway-only, matching current production;
+enable it only when explicitly requested. Compresr is an external optional
+plugin, not a Hermes core dependency; keep local compatibility shims temporary
+and upstream-first.
+
+For this deployment, Hermes state is bind-mounted from `/home/j2h4u/.hermes`
+and provider keys (including `GROQ_API_KEY`) come from
+`/home/j2h4u/.hermes/.env`; behavioral settings belong in `config.yaml`. Never
+restart or recreate the live gateway implicitly: obtain explicit operator
+approval before any live restart, rebuild, or redeploy.
+
 **Dependency chain:** `tools/registry.py` (no deps) ← `tools/*.py` (register at import) ←
 `model_tools.py` (discovery) ← `run_agent.py`, `cli.py`, `batch_runner.py`, `environments/`.
 
