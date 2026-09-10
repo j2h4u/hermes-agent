@@ -90,3 +90,108 @@ class TestNoMoreRowsRetry:
 
         with pytest.raises(sqlite3.InterfaceError, match="no more rows"):
             db._execute_write(always)
+
+    @pytest.mark.parametrize("error_type", [sqlite3.InterfaceError, sqlite3.DatabaseError])
+    def test_returned_null_sqlite_error_is_retried_to_success(
+        self, db, monkeypatch, error_type
+    ):
+        """The newer tracked-connection spelling shares the safe rollback retry path."""
+        calls = {"n": 0}
+        monkeypatch.setattr(
+            db,
+            "_enter_fts_fail_open",
+            lambda _exc: pytest.fail("WAL marker must not enter FTS recovery"),
+        )
+
+        def flaky(conn):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise error_type(
+                    "<TrackedConnection object at 0x0> returned NULL without setting an exception"
+                )
+            conn.execute(
+                "INSERT INTO state_meta (key, value) VALUES ('nullret', 'ok') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+            )
+            return "done"
+
+        assert db._execute_write(flaky) == "done"
+        assert calls["n"] == 3
+        assert db.get_meta("nullret") == "ok"
+
+    def test_returned_null_system_error_retries_only_before_callback(self, db):
+        """A tracked SystemError is retryable only while BEGIN is known incomplete."""
+        real_conn = db._conn
+        calls = {"begin": 0, "callback": 0}
+
+        class BeginFlakyConnection:
+            def __init__(self, wrapped):
+                self._wrapped = wrapped
+
+            def execute(self, sql, *args):
+                if sql == "BEGIN IMMEDIATE" and calls["begin"] < 2:
+                    calls["begin"] += 1
+                    raise SystemError(
+                        "<TrackedConnection object at 0x0> "
+                        "returned NULL without setting an exception"
+                    )
+                return self._wrapped.execute(sql, *args)
+
+            def __getattr__(self, name):
+                return getattr(self._wrapped, name)
+
+        db._conn = BeginFlakyConnection(real_conn)
+        try:
+            assert db._execute_write(lambda _conn: calls.__setitem__("callback", calls["callback"] + 1)) is None
+        finally:
+            db._conn = real_conn
+
+        assert calls == {"begin": 2, "callback": 1}
+
+    def test_returned_null_system_error_after_callback_is_not_replayed(self, db):
+        """A SystemError after callback admission has unknown settlement."""
+        calls = {"n": 0}
+
+        def broken(_conn):
+            calls["n"] += 1
+            raise SystemError(
+                "<TrackedConnection object at 0x0> returned NULL without setting an exception"
+            )
+
+        with pytest.raises(SystemError, match="returned NULL"):
+            db._execute_write(broken)
+        assert calls["n"] == 1
+
+    def test_returned_null_at_commit_is_not_replayed_or_sent_to_fts(self, db, monkeypatch):
+        """A marker raised by COMMIT is ambiguous and bypasses FTS corruption handling."""
+        real_conn = db._conn
+        calls = {"n": 0}
+
+        class CommitFailsConnection:
+            def __init__(self, wrapped):
+                self._wrapped = wrapped
+
+            def execute(self, sql, *args):
+                return self._wrapped.execute(sql, *args)
+
+            def commit(self):
+                raise sqlite3.DatabaseError(
+                    "<TrackedConnection object at 0x0> returned NULL without setting an exception"
+                )
+
+            def __getattr__(self, name):
+                return getattr(self._wrapped, name)
+
+        monkeypatch.setattr(
+            db,
+            "_enter_fts_fail_open",
+            lambda _exc: pytest.fail("WAL marker must not enter FTS recovery"),
+        )
+        db._conn = CommitFailsConnection(real_conn)
+        try:
+            with pytest.raises(sqlite3.DatabaseError, match="returned NULL"):
+                db._execute_write(lambda _conn: calls.__setitem__("n", calls["n"] + 1))
+        finally:
+            db._conn = real_conn
+
+        assert calls["n"] == 1
