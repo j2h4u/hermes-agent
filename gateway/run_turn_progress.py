@@ -19,6 +19,7 @@ from gateway.config import Platform
 from gateway.media_repair import repair_explicit_computer_use_media_paths
 from gateway.platforms.base import BasePlatformAdapter
 from gateway.turn_context import TurnContext
+from gateway.subagent_activity_board import observe_subagent_activity
 from hermes_cli.config import cfg_get
 from utils import is_truthy_value
 
@@ -147,6 +148,8 @@ class GatewayTurnProgressMixin:
     def progress_callback(self, event_type: str, tool_name: str | None = None, preview: str | None = None, args: dict | None = None, **kwargs):
         """Callback invoked by agent on tool lifecycle events."""
         ctx = self._ctx
+        # Detached children retain their originating board after the foreground turn ends.
+        observe_subagent_activity(ctx, self._runner, self._schedule, event_type, kwargs)
         if local_viewer_turn(self):
             try:
                 from gateway import local_viewer_events
