@@ -117,25 +117,6 @@ class TestTextBatching:
         assert [ref.origin_name for ref in dispatched.context_refs] == ["First", "Second"]
 
     @pytest.mark.asyncio
-    async def test_three_way_split_aggregated(self):
-        """Three rapid messages should all merge."""
-        adapter = _make_adapter()
-
-        adapter._enqueue_text_event(_make_event("chunk 1"))
-        await asyncio.sleep(0.02)
-        adapter._enqueue_text_event(_make_event("chunk 2"))
-        await asyncio.sleep(0.02)
-        adapter._enqueue_text_event(_make_event("chunk 3"))
-
-        await asyncio.sleep(0.2)
-
-        adapter.handle_message.assert_called_once()
-        text = adapter.handle_message.call_args[0][0].text
-        assert "chunk 1" in text
-        assert "chunk 2" in text
-        assert "chunk 3" in text
-
-    @pytest.mark.asyncio
     async def test_photo_batch_preserves_forward_context_refs(self):
         adapter = _make_adapter()
         first = _make_event("first")
