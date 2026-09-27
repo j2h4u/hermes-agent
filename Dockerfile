@@ -376,6 +376,16 @@ COPY --link --chmod=a+rX,go-w . .
 # The shared assembler binds the prepared environment and frontend products.
 RUN /opt/hermes/.venv/bin/python -m docker.build_agent
 
+# The local plugin layer verifies the exact source revision before installation.
+ARG HERMES_GIT_SHA=
+RUN if [ -n "$HERMES_GIT_SHA" ]; then \
+        printf '%s\n' "$HERMES_GIT_SHA" > /opt/hermes/.hermes_build_sha; \
+        /opt/hermes/.venv/bin/python scripts/write_install_stamp.py \
+            --output /opt/hermes/install-stamp.json --commit "$HERMES_GIT_SHA" \
+            --base-version "$(/opt/hermes/.venv/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" \
+            --source docker --distribution docker --update-mechanism external --runtime-dir tools; \
+    fi
+
 # Wire the exec shims and install-method stamp. Files under /opt/hermes are
 # already root-owned (COPY, dep assembly, npm install all run as root) and
 # read-only for the hermes user (go-w from the --chmod above).
