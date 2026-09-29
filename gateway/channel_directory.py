@@ -9,10 +9,11 @@ import contextlib
 import json
 import logging
 import time
-import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+import hermes_yaml as yaml
 
 from hermes_cli.config import get_hermes_home
 from utils import atomic_json_write
