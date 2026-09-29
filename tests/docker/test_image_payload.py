@@ -12,13 +12,19 @@ import os
 import sys
 import tempfile
 from pm.lock import Facts
+from pm.install import sealed
+from pm.paths import writable_store_root
 from pm.registry import get_package
 from pm.store import current_target
 from pm.workspace import _copy_core_inputs
 
 store = Path(os.environ['HERMES_RUNTIME_DIR'])
 stamp = json.loads(Path('/opt/hermes/install-stamp.json').read_text())
+manifest = json.loads(Path('/opt/hermes/manifest.json').read_text())
 assert (Path('/opt/hermes') / stamp['runtimeDir']).resolve() == store.resolve()
+assert (Path('/opt/hermes') / manifest['store']).resolve() == store.resolve()
+assert (Path('/opt/hermes') / manifest['runtime']['toolsDir']).resolve() == store.resolve()
+assert sealed() and writable_store_root() != store
 with tempfile.TemporaryDirectory() as directory:
     _copy_core_inputs(Path('/opt/hermes'), Path(directory))
     assert not (Path(directory) / store.relative_to('/opt/hermes')).exists(), 'the tool store entered a plugin source snapshot'

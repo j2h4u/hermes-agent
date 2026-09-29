@@ -53,10 +53,9 @@ def _read(path: Path, *, strict: bool = False) -> dict:
         # record. Keep the bytes for post-mortem.
         try:
             from pm.filesystem import long_root
-            from pm.paths import store_root
+            from pm.paths import sealed_store, store_root
             # A Store-built facts path carries the store's long spelling; compare like with like.
-            if (long_root(path.parent) == long_root(store_root())
-                    and (store_root().parent / "manifest.json").is_file()):
+            if long_root(path.parent) == long_root(store_root()) and sealed_store():
                 import logging
                 logging.getLogger(__name__).warning("invalid shipped state file: %s", path)
             else:

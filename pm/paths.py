@@ -63,8 +63,15 @@ def facts_path() -> Path:
     return store_root() / "facts.json"
 
 
+def sealed_store() -> bool:
+    store = store_root()
+    return (store.parent / "manifest.json").is_file() or (
+        store.parent.parent == repo_root() and (repo_root() / "manifest.json").is_file()
+    )
+
+
 def writable_store_root() -> Path:
-    if not (store_root().parent / "manifest.json").is_file():
+    if not sealed_store():
         return store_root()
     from hermes_constants import get_default_hermes_root
 
