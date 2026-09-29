@@ -204,9 +204,8 @@ def is_installed(name: str) -> bool:
 
 
 def sealed() -> bool:
-    """Sealed = bundled LAYOUT only: the store sits beside the bundle
-    manifest and is read-only as shipped."""
-    return (paths.store_root().parent / "manifest.json").is_file()
+    """Sealed = shipped store beneath the image or bundle manifest."""
+    return paths.sealed_store()
 
 
 def _refuse_lazy(name: str, what: str) -> InstallError:

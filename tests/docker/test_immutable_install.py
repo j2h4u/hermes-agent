@@ -53,7 +53,7 @@ except PermissionError:
 else:
     raise AssertionError('runtime user can alter installation method')
 assert code.read_text().strip() == 'docker'
-for relative in ('pm-runtime/pm-runtime.json', 'tools/facts.json', 'manifest.json'):
+for relative in ('pm-runtime/pm-runtime.json', '.runtime/tools/facts.json', 'manifest.json'):
     path = Path('/opt/hermes') / relative
     assert path.stat().st_uid == 0, path
     assert path.read_bytes(), path
