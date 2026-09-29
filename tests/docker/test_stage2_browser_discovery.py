@@ -58,8 +58,8 @@ def test_stage2_discovers_chromium_binary(
     r = docker_exec(
         container_name,
         "python3", "-c",
-        "import json; from pathlib import Path; "
-        "root = Path('/opt/hermes/tools'); "
+        "import json, os; from pathlib import Path; "
+        "root = Path(os.environ['HERMES_RUNTIME_DIR']); "
         "packages = json.loads((root / 'facts.json').read_text())['packages']; "
         "print(json.dumps({'packages': list(packages), 'shell_entries': "
         "[p.name for p in root.glob('*headless*shell*')]}))",
