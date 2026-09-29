@@ -7,12 +7,21 @@ import subprocess
 def test_python_uses_pm_interpreter_as_runtime_user(built_image: str) -> None:
     probe = """
 from pathlib import Path
+import json
+import os
 import sys
+import tempfile
 from pm.lock import Facts
 from pm.registry import get_package
 from pm.store import current_target
+from pm.workspace import _copy_core_inputs
 
-store = Path('/opt/hermes/tools')
+store = Path(os.environ['HERMES_RUNTIME_DIR'])
+stamp = json.loads(Path('/opt/hermes/install-stamp.json').read_text())
+assert (Path('/opt/hermes') / stamp['runtimeDir']).resolve() == store.resolve()
+with tempfile.TemporaryDirectory() as directory:
+    _copy_core_inputs(Path('/opt/hermes'), Path(directory))
+    assert not (Path(directory) / store.relative_to('/opt/hermes')).exists(), 'the tool store entered a plugin source snapshot'
 assert not list(store.glob('fetch-*')), 'completed download archives must not ship'
 fact = Facts(store / 'facts.json').get('python')
 expected = get_package('python').binary(store / fact['entry'], current_target())

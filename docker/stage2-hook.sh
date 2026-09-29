@@ -754,7 +754,7 @@ fi
 
 # --- Point agent-browser at the pinned Chromium binary ---
 # The image's Dockerfile pm-provisions pinned full Chromium into
-# $HERMES_RUNTIME_DIR (/opt/hermes/tools) at BUILD time and bakes the
+# $HERMES_RUNTIME_DIR (/opt/hermes/.runtime/tools) at BUILD time and bakes the
 # resolved browser binary path into /etc/hermes/agent-browser-executable-path
 # (the layout differs per arch — chrome-linux64/chrome on amd64,
 # chromium-linux-arm64/chromium on arm64 — so it is resolved at build time,
