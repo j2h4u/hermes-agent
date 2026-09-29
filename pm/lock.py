@@ -52,8 +52,8 @@ def _read(path: Path, *, strict: bool = False) -> dict:
         # the next _write would silently discard every installed-state
         # record. Keep the bytes for post-mortem.
         try:
-            from pm.paths import store_root
-            if path.parent == store_root() and (store_root().parent / "manifest.json").is_file():
+            from pm.paths import sealed_store, store_root
+            if path.parent == store_root() and sealed_store():
                 import logging
                 logging.getLogger(__name__).warning("invalid shipped state file: %s", path)
             else:

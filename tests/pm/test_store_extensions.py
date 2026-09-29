@@ -7,6 +7,21 @@ from pm.lock import Facts
 from tests.pm.test_pm_authority import core_env, pm_env, served  # noqa: F401 — fixtures
 
 
+def test_nested_image_store_is_sealed_and_installs_elsewhere(tmp_path, monkeypatch):
+    project = tmp_path / "hermes"
+    store = project / ".runtime" / "tools"
+    store.mkdir(parents=True)
+    (project / "manifest.json").write_text('{"store":".runtime/tools"}', encoding="utf-8")
+    monkeypatch.setattr(paths, "repo_root", lambda: project)
+    monkeypatch.setattr(paths, "store_root", lambda: store)
+    monkeypatch.setattr("hermes_constants.get_default_hermes_root", lambda: tmp_path / "home")
+
+    from pm.install import sealed
+
+    assert sealed()
+    assert paths.writable_store_root() == tmp_path / "home" / "tools"
+
+
 @pytest.mark.parametrize("sealed_install", [True, False])
 def test_missing_bundle_tool_is_installed_in_writable_store(pm_env, tmp_path, monkeypatch, sealed_install):
     from pm.install import ensure, env_for, is_installed
