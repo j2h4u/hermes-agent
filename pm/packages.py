@@ -408,12 +408,12 @@ class Venv(StatePackage):
         import hashlib
         import json
         from pm.lock import Lockfile
-        from pm.paths import lockfile_path
+        from pm.paths import lockfile_path, store_root
         from pm.store import current_target
 
         lock = Lockfile(lockfile_path())
         target = current_target()
-        python = (lock.version("python"), target,
+        python = (lock.version("python"), target, str(store_root()),
                   [artifact["sha256"] for artifact in lock.artifacts("python", target)])
         h = hashlib.sha256()
         h.update(_uv_lock_digest(self.project_root() / "uv.lock"))
