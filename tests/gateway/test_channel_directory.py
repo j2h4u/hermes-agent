@@ -14,6 +14,7 @@ from gateway.channel_directory import (
     resolve_channel_name,
     format_directory_for_display,
     load_directory,
+    _load_configured_telegram_dm_topics,
     _build_from_sessions,
     _build_slack,
 )
@@ -50,6 +51,22 @@ class TestLoadDirectory:
 
 
 class TestBuildChannelDirectoryWrites:
+    def test_configured_telegram_dm_topics_use_core_yaml_parser(self, tmp_path, monkeypatch):
+        (tmp_path / "config.yaml").write_text(
+            "platforms:\n  telegram:\n    extra:\n      dm_topics:\n"
+            "        - chat_id: 591994976\n          topics:\n"
+            "            - name: Reports\n              thread_id: 306001\n"
+            "              enabled: yes\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("gateway.channel_directory.get_hermes_home", lambda: tmp_path)
+
+        assert _load_configured_telegram_dm_topics() == [
+            {"chat_id": 591994976, "topics": [
+                {"name": "Reports", "thread_id": 306001, "enabled": True}
+            ]}
+        ]
+
     def test_failed_write_preserves_previous_cache(self, tmp_path, monkeypatch):
         cache_file = _write_directory(tmp_path, {
             "telegram": [{"id": "123", "name": "Alice", "type": "dm"}]
