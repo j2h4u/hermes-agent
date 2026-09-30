@@ -276,7 +276,8 @@ test "$(git -C "$HERMES_SOURCE_DIR" rev-parse HEAD)" = "$EXPECTED_HERMES_GIT_SHA
 
 Only then may the separately approved workflow use
 `HERMES_SOURCE_DIR="$HERMES_SOURCE_DIR" /opt/docker/hermes-agent/build.sh`.
-Do not run that build, a restart, or a redeploy as part of ordinary source work.
+For accepted local fixes and upstream updates, rebuilding, redeploying, and verifying
+the live gateway are part of completing the task (operator authorization, 2026-09-30).
 
 The live deployment is Telegram-first. The Compose dashboard is now an opt-in
 profile, so the default remains gateway-only, matching current production;
@@ -287,8 +288,9 @@ and upstream-first.
 For this deployment, Hermes state is bind-mounted from `/home/j2h4u/.hermes`
 and provider keys (including `GROQ_API_KEY`) come from
 `/home/j2h4u/.hermes/.env`; behavioral settings belong in `config.yaml`. Never
-restart or recreate the live gateway implicitly: obtain explicit operator
-approval before any live restart, rebuild, or redeploy.
+rebuild and restart the live gateway autonomously after accepted Hermes changes;
+no separate approval is required. Verify Telegram and configured MCP integrations
+after deployment. Do not restart for unrelated read-only investigations.
 
 **Dependency chain:** `tools/registry.py` (no deps) ← `tools/*.py` (register at import) ←
 `model_tools.py` (discovery) ← `run_agent.py`, `cli.py`, `batch_runner.py`, `environments/`.
