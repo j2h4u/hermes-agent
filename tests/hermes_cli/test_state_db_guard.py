@@ -85,6 +85,23 @@ def test_restore_flow_end_to_end(valid_db, tmp_path):
     conn.close()
 
 
+def test_integrity_check_reports_sqlite_progress(tmp_path, monkeypatch):
+    import hermes_startup_watchdog
+
+    path = tmp_path / "state.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE messages (content TEXT)")
+        conn.executemany("INSERT INTO messages VALUES (?)", [("message",)] * 5_000)
+    progress = []
+    monkeypatch.setattr(
+        hermes_startup_watchdog, "report_startup_progress",
+        lambda seconds, *, phase: progress.append((seconds, phase)),
+    )
+    assert verify_sqlite_integrity(path)["valid"]
+    assert len(progress) > 1  # SQLite advanced; not just a one-time boot lease.
+    assert all(phase == "state_db_integrity_check" for _, phase in progress)
+
+
 class TestPreUpdateBackupIntegrityGuard:
     """E2E: run the real ``_run_pre_update_backup`` against a temp
     HERMES_HOME whose state.db is corrupted mid-flight (#68474)."""
