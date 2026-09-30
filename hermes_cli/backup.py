@@ -403,6 +403,20 @@ _SQLITE_HEADER = b"SQLite format 3\0"
 DEFAULT_INTEGRITY_CHECK_MAX_BYTES = 2 << 30  # 2 GiB
 
 
+def _integrity_check_rows(conn: sqlite3.Connection) -> list[str]:
+    from hermes_startup_watchdog import report_startup_progress
+
+    def progress() -> int:
+        report_startup_progress(60.0, phase="state_db_integrity_check")
+        return 0
+
+    # A large live database can outlast startup's deadline. Renew only while
+    # SQLite advances, so a stalled check still remains watchdog-bounded.
+    progress()
+    conn.set_progress_handler(progress, 10_000)
+    return [str(row[0]) for row in conn.execute("PRAGMA integrity_check")]
+
+
 def verify_sqlite_integrity(
     path: Path, *, check_header: bool = True, run_pragma: bool = True,
     max_bytes: int = DEFAULT_INTEGRITY_CHECK_MAX_BYTES) -> dict:
@@ -442,8 +456,7 @@ def verify_sqlite_integrity(
             "skipped PRAGMA integrity_check (header + schema probe passed)",
             valid=True, size=size)
     if run_pragma:
-        rows, exc = _query_ro_sqlite(
-            path, lambda c: [str(r[0]) for r in c.execute("PRAGMA integrity_check")])
+        rows, exc = _query_ro_sqlite(path, _integrity_check_rows)
         if exc is not None:
             kind = "cannot open database" if isinstance(exc, sqlite3.DatabaseError) else "integrity check error"
             return _done(f"{kind}: {exc}", size=size)
