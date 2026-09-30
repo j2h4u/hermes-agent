@@ -233,8 +233,9 @@ def _add_telegram_dm_topics(channels: List[Dict[str, Any]], seen_ids: set[str], 
 
 
 def _build_telegram(adapter) -> List[Dict[str, Any]]:
-    channels: List[Dict[str, Any]] = list(_build_from_sessions("telegram"))
-    seen_ids = {str(item.get("id")) for item in channels if item.get("id")}
+    # Configured names take precedence over stale or unnamed session origins.
+    channels: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
     _add_telegram_dm_topics(channels, seen_ids, _load_configured_telegram_dm_topics())
     _add_telegram_dm_topics(channels, seen_ids, getattr(adapter, "_dm_topics_config", None))
     for cache_key, thread_id in (getattr(adapter, "_dm_topics", None) or {}).items():
@@ -242,6 +243,10 @@ def _build_telegram(adapter) -> List[Dict[str, Any]]:
             chat_id, topic_name = cache_key.split(":", 1)
             _add_telegram_dm_topics(channels, seen_ids, [{"chat_id": chat_id,
                 "topics": [{"name": topic_name, "thread_id": thread_id}]}])
+    for channel in _build_from_sessions("telegram"):
+        if channel["id"] not in seen_ids:
+            channels.append(channel)
+            seen_ids.add(channel["id"])
     return channels
 
 

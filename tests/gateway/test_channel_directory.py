@@ -120,7 +120,10 @@ class TestBuildChannelDirectoryWrites:
             }],
         )
         monkeypatch.setattr(
-            "gateway.channel_directory._build_from_sessions", lambda _platform: []
+            "gateway.channel_directory._build_from_sessions", lambda _platform: [{
+                "id": "591994976:306001", "name": "Personal / topic 306001",
+                "type": "dm_topic", "thread_id": "306001",
+            }, {"id": "other", "name": "Other chat", "type": "dm"}]
         )
 
         cache_file = tmp_path / "channel_directory.json"
@@ -134,7 +137,7 @@ class TestBuildChannelDirectoryWrites:
             "name": "Personal / Reports",
             "type": "dm_topic",
             "thread_id": "306001",
-        }]
+        }, {"id": "other", "name": "Other chat", "type": "dm"}]
 
 
 class TestBuildChannelDirectoryOffload:
