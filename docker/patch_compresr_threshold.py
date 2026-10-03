@@ -7,8 +7,12 @@ or source changes must fail the build rather than silently lose the limit.
 from __future__ import annotations
 
 import hashlib
+import base64
+import csv
+import io
 import os
 import sys
+import zipfile
 from importlib.metadata import distribution
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -37,6 +41,26 @@ def patch_config_source(source: str) -> str:
     if source.count(old) != 1:
         raise RuntimeError("Compresr YAML patch anchor is not unique")
     return source.replace(old, "        import hermes_yaml as yaml\n", 1)
+
+
+def write_patched_wheel(package) -> None:
+    """Let PM install the same patched artifact into its dependency generations."""
+    output = Path(__file__).with_name(f"compresr-{TARGET_VERSION}-py3-none-any.whl")
+    record_path = f"compresr-{TARGET_VERSION}.dist-info/RECORD"
+    rows = []
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as wheel:
+        for entry in package.files or ():
+            name = str(entry)
+            if ".." in entry.parts or name.endswith((".pyc", "/RECORD", "/INSTALLER", "/REQUESTED")):
+                continue
+            data = Path(package.locate_file(entry)).read_bytes()
+            digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+            rows.append((name, f"sha256={digest}", str(len(data))))
+            wheel.writestr(name, data)
+        record = io.StringIO(newline="")
+        csv.writer(record).writerows([*rows, (record_path, "", "")])
+        wheel.writestr(record_path, record.getvalue())
+    print(f"Built patched wheel: {output.name}")
 
 
 def verify() -> None:
@@ -104,6 +128,7 @@ if __name__ == "__main__":
         compile(patched_config, str(config_path), "exec")
         path.write_text(patched, encoding="utf-8")
         config_path.write_text(patched_config, encoding="utf-8")
+        write_patched_wheel(package)
         print("Applied Compresr absolute compression threshold fix")
     else:
         raise SystemExit("usage: patch_compresr_threshold.py [--verify]")
