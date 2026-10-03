@@ -19,5 +19,6 @@ RUN uv_bin="$(/opt/hermes/.venv/bin/python -c 'from pm._uv import _toolchain; pr
     rm -f /opt/hermes/.venv/.lock
 
 # Remove/review the guarded patch when upgrading the external plugin.
+COPY docker/patch_compresr_threshold.py /opt/hermes/docker/patch_compresr_threshold.py
 RUN /opt/hermes/.venv/bin/python /opt/hermes/docker/patch_compresr_threshold.py && \
     /opt/hermes/.venv/bin/python /opt/hermes/docker/patch_compresr_threshold.py --verify

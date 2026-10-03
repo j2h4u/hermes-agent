@@ -1,0 +1,11 @@
+[project]
+name = "hermes-local-compresr"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = ["compresr==2.9.2"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+compresr = { path = "/opt/hermes/docker/compresr-2.9.2-py3-none-any.whl" }
