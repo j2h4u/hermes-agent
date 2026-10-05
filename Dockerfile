@@ -476,7 +476,7 @@ COPY --chmod=0755 docker/cont-finish.d/50-stop-gateways /etc/cont-finish.d/50-st
 # Allow the finish hook to wait for the supervised gateways to exit. The
 # hook exits early for idle gateways, so this is a maximum rather than a fixed
 # delay on normal container stops.
-ENV S6_KILL_FINISH_MAXTIME=45000
+ENV S6_KILL_FINISH_MAXTIME=255000
 
 # ---------- Runtime ----------
 ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
