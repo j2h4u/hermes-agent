@@ -67,6 +67,7 @@ Once configured, run the container in the background as a persistent gateway (Te
 docker run -d \
   --name hermes \
   --restart unless-stopped \
+  --stop-timeout 270 \
   -v ~/.hermes:/opt/data \
   -p 8642:8642 \
   nousresearch/hermes-agent gateway run
@@ -81,6 +82,18 @@ You'll see a one-line breadcrumb in `docker logs` confirming the upgrade. To opt
 
 This behavior applies to the s6-based image only. Earlier (tini-based) images still run `gateway run` as the foreground main process.
 :::
+
+Container shutdown explicitly stops and waits for dynamically registered gateway
+slots without changing their persisted start/stop intent. The waits run concurrently
+and finish as soon as all gateways exit; 250 seconds is a ceiling, not a fixed delay.
+The s6 finish-hook ceiling is 255 seconds, and Docker must allow at least 270 seconds
+(`--stop-timeout 270`, or Compose `stop_grace_period: 270s`). Docker's default
+10-second timeout can otherwise kill the gateway before session storage closes.
+These bounds cover `agent.restart_drain_timeout` up to 180 seconds plus the gateway's
+60-second shutdown-watchdog grace. If you raise that setting further, increase the
+hook's wait, `S6_KILL_FINISH_MAXTIME`, and Docker's stop timeout in that order.
+`S6_SERVICES_GRACETIME` only covers legacy `/etc/services.d` services, not Hermes'
+dynamic gateway slots; increasing it alone does not protect their shutdown.
 
 :::note Where gateway logs go
 See the [Where the logs go](#where-the-logs-go) section below for the full routing map (per-profile gateways, dashboard, boot reconciler, container-wide `docker logs`).

@@ -36,6 +36,8 @@ services:
     image: hermes-agent
     container_name: hermes
     restart: unless-stopped
+    # Must outlast the 250s dynamic-gateway drain and 255s s6 finish-hook bound.
+    stop_grace_period: 270s
     network_mode: host
     volumes:
       - ~/.hermes:/opt/data
@@ -69,6 +71,7 @@ services:
     image: hermes-agent
     container_name: hermes-dashboard
     restart: unless-stopped
+    stop_grace_period: 270s
     network_mode: host
     depends_on:
       - gateway
