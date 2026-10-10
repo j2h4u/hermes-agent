@@ -26,7 +26,7 @@ from hermes_state_holders import read_only_db_uri
 
 from agent.provider_media import GENERATED_SUBDIR
 from hermes_cli.archive_safe import normalize_archive_parts
-from hermes_cli.backup_sqlite import _close_quietly, _safe_copy_db
+from hermes_cli.backup_sqlite import _close_quietly, _integrity_check_rows, _safe_copy_db
 from hermes_cli.home_data_layout import PM_RUNTIME_ROOT_DIRS, profile_root_entry
 from hermes_cli.sizefmt import format_bytes as _format_size
 
@@ -402,20 +402,6 @@ _SQLITE_HEADER = b"SQLite format 3\0"
 # structural probe. Sessions databases in the tens of GB are normal for heavy users, so the size-unbounded
 # check is never an acceptable default on the update path. See #70553.
 DEFAULT_INTEGRITY_CHECK_MAX_BYTES = 2 << 30  # 2 GiB
-
-
-def _integrity_check_rows(conn: sqlite3.Connection) -> list[str]:
-    from hermes_startup_watchdog import report_startup_progress
-
-    def progress() -> int:
-        report_startup_progress(60.0, phase="state_db_integrity_check")
-        return 0
-
-    # A large live database can outlast startup's deadline. Renew only while
-    # SQLite advances, so a stalled check still remains watchdog-bounded.
-    progress()
-    conn.set_progress_handler(progress, 10_000)
-    return [str(row[0]) for row in conn.execute("PRAGMA integrity_check")]
 
 
 def verify_sqlite_integrity(
