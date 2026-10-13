@@ -25,6 +25,7 @@ node_modules
 **/node_modules
 .venv
 **/.venv
+.hermes-runtime/
 .notebooklm-cli-venv/
 .notebooklm-playwright/
 .pip-cache/
