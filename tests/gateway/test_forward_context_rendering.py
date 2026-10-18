@@ -1,11 +1,11 @@
 """Regression tests for inbound provenance rendering order and safety."""
 
-from types import SimpleNamespace
-
 import pytest
 
+from gateway.config import Platform
 from gateway.platforms.event import MessageContextRef, MessageEvent
 from gateway.run_inbound import GatewayInboundMixin
+from gateway.session import SessionSource
 
 
 @pytest.mark.asyncio
@@ -25,7 +25,7 @@ async def test_user_context_refs_expand_before_untrusted_forward_metadata():
         return "expanded user request"
 
     runner._expand_inbound_context_references = expand
-    source = SimpleNamespace()
+    source = SessionSource(platform=Platform.TELEGRAM, chat_id="123")
     event = MessageEvent(
         text="please expand @notes",
         source=source,
@@ -56,7 +56,7 @@ async def test_forward_envelope_precedes_reply_context():
     runner._prepend_inbound_media_file_notes = lambda text, _audio, _video: text
     runner._prepend_inbound_document_notes = lambda _event, text: text
 
-    source = SimpleNamespace(platform=None)
+    source = SessionSource(platform=Platform.TELEGRAM, chat_id="123")
     event = MessageEvent(
         text="what about this?",
         source=source,
