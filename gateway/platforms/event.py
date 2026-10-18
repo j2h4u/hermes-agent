@@ -8,7 +8,6 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import re
 from typing import Any, Dict, List, Optional
 
 from gateway.session import SessionSource
