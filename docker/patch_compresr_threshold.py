@@ -66,14 +66,15 @@ def write_patched_wheel(package) -> None:
 def verify() -> None:
     """Exercise real config reads and the installed engine, without API calls."""
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    import hermes_bootstrap  # noqa: F401 — exposes the managed Hermes dependencies
-    from compresr.integrations.hermes.engine import CompresrContextEngine
-
     previous_home = os.environ.get("HERMES_HOME")
     with TemporaryDirectory(prefix="compresr-threshold-check-") as home:
         os.environ["HERMES_HOME"] = home
         config = Path(home) / "config.yaml"
         try:
+            # Hermes imports initialize home directories, so isolate them too.
+            import hermes_bootstrap  # noqa: F401 — exposes the managed Hermes dependencies
+            from compresr.integrations.hermes.engine import CompresrContextEngine
+
             config.write_text(
                 "compression:\n  threshold: 0.5\n  threshold_tokens: 120000\n",
                 encoding="utf-8",

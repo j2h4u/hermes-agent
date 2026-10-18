@@ -100,7 +100,7 @@ def sleep_container(built_image: str, container_name: str) -> Iterator[str]:
         yield container_name
     finally:
         subprocess.run(
-            ["docker", "rm", "-f", container_name],
+            ["docker", "rm", "-f", "-v", container_name],
             capture_output=True, check=False,
         )
 
