@@ -14,6 +14,7 @@ from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import SessionSource
 from gateway.platforms.event import MessageContextRef, MessageEvent, MessageType
 from gateway.session import build_session_key
+from tests.waiting import async_wait_until
 
 
 def _make_adapter():
@@ -109,9 +110,8 @@ class TestTextBatching:
         second.context_refs.append(MessageContextRef(kind="forward", origin_name="Second"))
 
         adapter._enqueue_text_event(first)
-        await asyncio.sleep(0.02)
         adapter._enqueue_text_event(second)
-        await asyncio.sleep(0.2)
+        await async_wait_until(lambda: adapter.handle_message.call_count == 1, timeout=2)
 
         dispatched = adapter.handle_message.call_args[0][0]
         assert [ref.origin_name for ref in dispatched.context_refs] == ["First", "Second"]

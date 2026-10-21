@@ -110,6 +110,14 @@ def _not_pinned_sql(alias: str = "s") -> str:
 class SessionMaintenanceMixin:
     """Retention pruning, stale-session archiving and VACUUM policy for SessionDB."""
 
+    def _after_successful_write(self) -> None:
+        """Run periodic best-effort maintenance only after a committed write."""
+        self._write_count += 1
+        if self._write_count % self._CHECKPOINT_EVERY_N_WRITES == 0:
+            self._try_wal_checkpoint()
+        if self._write_count % self._FTS_MERGE_EVERY_N_WRITES == 0:
+            self._try_incremental_merge_fts()
+
     def prune_empty_ghost_sessions(self, sessions_dir: Optional[Path] = None) -> int:
         """Remove empty TUI ghost sessions (no messages, no title, >24hr old)."""
         cutoff = time.time() - 86400

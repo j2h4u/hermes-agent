@@ -43,7 +43,7 @@ from hermes_state_errors import (
     _DELETED_WAL_GENERATION_MSG, _DISK_IO_ERROR_MARKER, _STATE_DB_CORRUPT_MSG, _STATE_DB_GENERATION_KEY,
     _STATE_DB_REPLACED_MSG, DeletedWalGenerationError, SessionCompressionInProgressError, StateDbCorruptError,
     StateDbReplacedError, _is_transient_wal_error, classify_persistence_error, is_malformed_db_error,
-    is_malformed_schema_error, is_sqlite_lock_error,
+    is_malformed_schema_error, is_sqlite_lock_error, wal_write_retry_safe,
 )
 from hermes_state_guard import (
     _STATE_DB_GUARD_BYPASS_ENV, _in_test_context, _is_production_state_db, _real_platform_state_root,
@@ -67,6 +67,8 @@ from hermes_state_dbfile import (
     RetiredGenerationCaptureError, capture_retired_wal_generation, refuse_deleted_wal_generation,
 )
 from hermes_state_messages import SessionMessagesMixin
+from hermes_state_prune_rewrite import SessionPruneRewriteMixin
+from hermes_state_api_content import SessionApiContentMixin
 from hermes_state_coverage import SessionCoverageMixin
 from hermes_state_rewind import SessionRewindMixin
 from hermes_state_wal import (
@@ -462,7 +464,7 @@ class SessionDB(
     SessionSessionsMixin, SessionFtsSetupMixin, SessionSearchMixin, SessionSchemaMixin,
     SessionPortabilityMixin, SessionTelegramTopicsMixin, SessionCompressionMixin,
     SessionGatewayMixin, SessionMaintenanceMixin, SessionUsageMixin, SessionTitlesMixin,
-    SessionMessagesMixin, SessionCoverageMixin, SessionRewindMixin, SessionProfileRepairMixin,
+    SessionMessagesMixin, SessionPruneRewriteMixin, SessionApiContentMixin, SessionCoverageMixin, SessionRewindMixin, SessionProfileRepairMixin,
 ):
     """SQLite-backed session storage with FTS5 search; many reader threads, one writer (WAL)."""
 
@@ -1058,12 +1060,7 @@ class SessionDB(
                         else:
                             rollback_succeeded = True
                         raise
-                # Success — periodic best-effort checkpoint + FTS merge.
-                self._write_count += 1
-                if self._write_count % self._CHECKPOINT_EVERY_N_WRITES == 0:
-                    self._try_wal_checkpoint()
-                if self._write_count % self._FTS_MERGE_EVERY_N_WRITES == 0:
-                    self._try_incremental_merge_fts()
+                self._after_successful_write()
                 return result
             except SessionCompressionInProgressError:
                 # Transient (see _COMPRESSION_BUSY_WAIT_S): a steer landing mid-compression must not abort.
@@ -1081,7 +1078,7 @@ class SessionDB(
                 ):
                     continue
                 raise
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, SystemError) as exc:
                 # SQLite builds spell one contended-WAL append failure either as
                 # 'no more rows available' or 'returned NULL without setting an
                 # exception'. Never let this marker reach the FTS-corruption
@@ -1091,9 +1088,7 @@ class SessionDB(
                 # during/after COMMIT is ambiguous and must propagate because
                 # replaying the callback could duplicate a durable record.
                 if _is_transient_wal_error(exc):
-                    retry_safe = transaction_phase == "begin" or (
-                        transaction_phase == "callback" and rollback_succeeded
-                    )
+                    retry_safe = wal_write_retry_safe(exc, transaction_phase, rollback_succeeded)
                     if retry_safe and self._sleep_before_write_retry(deadline, patience_s):
                         continue
                     raise
@@ -1138,18 +1133,6 @@ class SessionDB(
                     # What survives both checks is structural damage: quarantine.
                     if self._is_structural_corruption_error(exc):
                         self._halt_db_corrupt(exc)
-                raise
-            except SystemError as exc:
-                # The tracked sqlite wrapper may emit the same marker outside
-                # sqlite3.Error. Only a failure before callback admission is
-                # replay-safe; once callback/COMMIT began, settlement is not
-                # knowable and the write must not be repeated.
-                if _is_transient_wal_error(exc):
-                    if transaction_phase == "begin" and self._sleep_before_write_retry(
-                        deadline, patience_s
-                    ):
-                        continue
-                    raise
                 raise
 
     def _write_sql(

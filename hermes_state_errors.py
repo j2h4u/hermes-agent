@@ -74,6 +74,13 @@ def _is_transient_wal_error(exc: BaseException) -> bool:
     )
 
 
+def wal_write_retry_safe(exc: BaseException, phase: str, rollback_succeeded: bool) -> bool:
+    """A wrapper SystemError cannot confirm callback settlement, even after rollback."""
+    return phase == "begin" or (
+        phase == "callback" and rollback_succeeded and isinstance(exc, sqlite3.Error)
+    )
+
+
 def _is_no_more_rows(exc: sqlite3.Error) -> bool:
     """Backward-compatible narrow predicate for the older WAL spelling."""
     return isinstance(exc, sqlite3.Error) and "no more rows available" in str(exc).lower()
@@ -181,6 +188,27 @@ class SessionCompressionInProgressError(CompressionSessionBusyError):
     (the compressor publishes in seconds; ``_execute_write`` waits), unlike the
     parent class's other case (a compressor whose own lease is gone: permanent,
     fail fast). Subclassing keeps every existing handler working."""
+
+
+class PruneRowUnresolvedError(RuntimeError):
+    """An in-place prune rewrite could not name the exact live row of a changed message. Raised before
+    any write, so the caller commits through ``archive_and_compact`` instead."""
+
+
+class PruneRowStaleError(PruneRowUnresolvedError):
+    """The named live row no longer holds the body the pruner is pruning: another writer already
+    rewrote this generation. Unlike plain ambiguity this must NOT fall back to the full writer —
+    that writer archives rows it never compared and would republish the stale held text over the
+    newer one. Subclassing keeps callers that only know the parent failing closed-enough (they stop
+    the in-place path); the prune caller tells the two apart and skips the pass entirely."""
+
+
+class HeldRowRewrittenError(RuntimeError):
+    """A full-writer commit found one of the held rows it was about to archive already rewritten in
+    place by another writer. Raised INSIDE the commit's write transaction, after the caller's
+    precheck but before any row is archived: a write that lands in that window is exactly the lost
+    race the precheck cannot see (#124102). Callers treat it like ``StaleHeldHistory`` — nothing
+    written, the pass is a no-op and the newer generation keeps the session."""
 
 
 class SessionTurnLeaseLostError(RuntimeError):
