@@ -72,7 +72,7 @@ def verify() -> None:
         config = Path(home) / "config.yaml"
         try:
             # Hermes imports initialize home directories, so isolate them too.
-            import hermes_bootstrap  # noqa: F401 — exposes the managed Hermes dependencies
+            import hermes_bootstrap  # exposes the managed Hermes dependencies
             from compresr.integrations.hermes.engine import CompresrContextEngine
 
             config.write_text(

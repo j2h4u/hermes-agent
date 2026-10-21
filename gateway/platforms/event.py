@@ -21,6 +21,11 @@ from gateway.session import SessionSource
 _ATTACHMENT_REF_RE = re.compile(r"^(?:@(?:image|file|url):[^\n]+\n?)+", re.IGNORECASE)
 
 
+def _append_text(existing: Optional[str], new: Optional[str]) -> str:
+    """``existing\\nnew`` when both non-empty; the non-empty one otherwise."""
+    return f"{existing}\n{new}" if existing else new
+
+
 class MessageType(Enum):
     """Types of incoming messages."""
     TEXT = "text"
@@ -105,11 +110,8 @@ class MessageContextRef:
                 lines.append(f"Author: {self._render_field(self.origin_name)}")
         elif self.origin_name or self.origin_chat:
             lines.append(f"From: {self._render_field(self.origin_name or self.origin_chat)}")
-        if self.date is not None:
-            try:
-                lines.append(f"Date: {self.date.isoformat()}")
-            except Exception:
-                pass
+        if isinstance(self.date, datetime):
+            lines.append(f"Date: {self.date.isoformat()}")
         if self.text:
             lines.append(f'Quoted: "{self._render_field(self.text, max_len=500)}"')
         if self.is_confidence_limited:
@@ -156,7 +158,7 @@ class MessageEvent:
     reply_to_author_name: Optional[str] = None
     reply_to_is_own_message: bool = False  # True when the user replied to this bot/assistant's message
     # Normalized platform provenance, e.g. Telegram forwarded-message origin.
-    context_refs: List[MessageContextRef] = field(default_factory=list)
+    context_refs: list[MessageContextRef] = field(default_factory=list)
     # Structured interactive-prompt reply (relay only): {prompt_id, option_id, label?,
     # prompt_message_id?}; routed to the approval/slash-confirm/clarify resolvers BEFORE dispatch.
     prompt_response: Optional[dict[str, Any]] = None

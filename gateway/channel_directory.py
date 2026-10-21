@@ -202,21 +202,21 @@ def _build_discord(adapter) -> list[dict[str, str]]:
     return channels
 
 
-def _load_configured_telegram_dm_topics() -> List[Dict[str, Any]]:
+def _load_configured_telegram_dm_topics() -> list[dict[str, Any]]:
     config_path = get_hermes_home() / "config.yaml"
     if not config_path.exists():
         return []
     try:
-        with open(config_path, encoding="utf-8") as stream:
+        with open(config_path, encoding="utf-8-sig") as stream:
             config = yaml.safe_load(stream) or {}
-    except Exception as exc:
+    except (OSError, yaml.YAMLError) as exc:
         logger.debug("Channel directory: failed to read Telegram dm_topics config: %s", exc)
         return []
     topics = config.get("platforms", {}).get("telegram", {}).get("extra", {}).get("dm_topics", [])
     return topics if isinstance(topics, list) else []
 
 
-def _add_telegram_dm_topics(channels: List[Dict[str, Any]], seen_ids: set[str], config: Any) -> None:
+def _add_telegram_dm_topics(channels: list[dict[str, Any]], seen_ids: set[str], config: Any) -> None:
     for chat_entry in config if isinstance(config, list) else ():
         if not isinstance(chat_entry, dict) or not chat_entry.get("chat_id"):
             continue
@@ -233,9 +233,9 @@ def _add_telegram_dm_topics(channels: List[Dict[str, Any]], seen_ids: set[str], 
                 seen_ids.add(entry_id)
 
 
-def _build_telegram(adapter) -> List[Dict[str, Any]]:
+def _build_telegram(adapter) -> list[dict[str, Any]]:
     # Configured names take precedence over stale or unnamed session origins.
-    channels: List[Dict[str, Any]] = []
+    channels: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     _add_telegram_dm_topics(channels, seen_ids, _load_configured_telegram_dm_topics())
     _add_telegram_dm_topics(channels, seen_ids, getattr(adapter, "_dm_topics_config", None))

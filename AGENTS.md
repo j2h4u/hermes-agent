@@ -98,10 +98,7 @@ hermes-agent/
 **User state:** `~/.hermes/config.yaml` (settings), `.env` (secrets only), `logs/` (`hermes logs`);
 all profile-aware via `get_hermes_home()`.
 
-## Local deployment
-
-Read [LOCAL_FIXES.md](LOCAL_FIXES.md) for production deployment, retained downstream fixes,
-and the checks required when refreshing upstream.
+[Local deployment](LOCAL_FIXES.md).
 
 ### Facade + siblings layout
 

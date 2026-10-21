@@ -27,6 +27,7 @@ def test_shutdown_hook_exits_without_gateway_slots(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         timeout=5,
+        check=False,
     )
 
     assert result.returncode == 0, result.stderr
@@ -75,6 +76,7 @@ def test_stale_slot_does_not_cancel_healthy_slot_wait(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         timeout=5,
+        check=False,
     )
 
     assert result.returncode == 0, result.stderr

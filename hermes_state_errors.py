@@ -74,6 +74,13 @@ def _is_transient_wal_error(exc: BaseException) -> bool:
     )
 
 
+def wal_write_retry_safe(exc: BaseException, phase: str, rollback_succeeded: bool) -> bool:
+    """A wrapper SystemError cannot confirm callback settlement, even after rollback."""
+    return phase == "begin" or (
+        phase == "callback" and rollback_succeeded and isinstance(exc, sqlite3.Error)
+    )
+
+
 def _is_no_more_rows(exc: sqlite3.Error) -> bool:
     """Backward-compatible narrow predicate for the older WAL spelling."""
     return isinstance(exc, sqlite3.Error) and "no more rows available" in str(exc).lower()
