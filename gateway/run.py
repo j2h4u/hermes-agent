@@ -4251,7 +4251,6 @@ class GatewayRunner(
 
     @dataclasses.dataclass
     class _RunAgentDisplay:
-        """Per-turn display / progress settings resolved by ``_run_agent_display_settings``."""
         user_config: Any = None
         platform_key: Any = None
         enabled_toolsets: Any = None

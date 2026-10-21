@@ -2,7 +2,6 @@
 
 import asyncio
 import threading
-import time
 from types import SimpleNamespace
 
 import pytest
@@ -293,7 +292,6 @@ async def test_concurrent_first_events_create_exactly_one_board_and_bubble(monke
     class _SlowBoard(real_board):
         def __init__(self, *args, **kwargs):
             nonlocal boards_created
-            time.sleep(0.02)  # widen the check/create race window
             with boards_lock:
                 boards_created += 1
             super().__init__(*args, min_edit_interval=0.0, **kwargs)
@@ -637,7 +635,38 @@ def test_heartbeat_advances_running_elapsed_and_completion_freezes_it():
 
 
 def test_display_setting_defaults_on_and_can_be_switched_off_per_platform():
+    from hermes_cli.plugins import discover_plugins
+    discover_plugins()
     assert resolve_display_setting({}, "telegram", "subagent_activity_board") is True
     assert resolve_display_setting({}, "discord", "subagent_activity_board") is False
     config = {"display": {"platforms": {"telegram": {"subagent_activity_board": "off"}}}}
     assert resolve_display_setting(config, "telegram", "subagent_activity_board") is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("deferred", ["skipped", "flood"])
+async def test_deferred_telegram_edit_does_not_consume_terminal_status(scheduled, deferred):
+    from gateway.platforms.base import SendResult
+
+    class BusyAdapter(_EditingAdapter):
+        skip_next = True
+
+        async def edit_message(self, chat_id, message_id, content, **kwargs):
+            if self.skip_next:
+                self.skip_next = False
+                if deferred == 'flood':
+                    from plugins.platforms.telegram.adapter import _flood_cap_result
+                    return _flood_cap_result(7.5)
+                return SendResult(success=True, message_id=message_id, raw_response={'skipped': True})
+            return await super().edit_message(chat_id, message_id, content, **kwargs)
+
+    fake = _FakeTime()
+    adapter = BusyAdapter()
+    turn = _turn(adapter, fake_time=fake)
+    turn.progress_callback('subagent.start', **_child(0))
+    await _drain(scheduled)
+    turn.progress_callback('subagent.complete', status='ok', **_child(0))
+    await _drain(scheduled)
+    assert len(adapter.sent) == 1
+    assert len(adapter.edits) == 1
+    assert '1/1 done' in adapter.texts[-1]

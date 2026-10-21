@@ -34,7 +34,7 @@ import time
 from typing import Any, Callable, Optional
 
 from gateway.config import Platform
-from gateway.platforms.base import BasePlatformAdapter
+from gateway.platforms.base import BasePlatformAdapter, SendResult
 
 logger = logging.getLogger(__name__)
 
@@ -185,14 +185,15 @@ class SubagentActivityBoard:
                 observed_elapsed = max(0.0, self._clock() - child["started_at"])
                 changed |= _format_elapsed(child["elapsed"]) != _format_elapsed(observed_elapsed)
                 child["elapsed"] = observed_elapsed
-                if event_type == "subagent.thinking":
-                    changed |= child["phase"] != "thinking"
-                    child["phase"] = "thinking"
-                elif event_type == "subagent.tool":
+                phase = {"subagent.thinking": "thinking", "subagent.tool": "working"}.get(event_type)
+                if phase is not None:
+                    changed |= child["phase"] != phase
+                    child["phase"] = phase
+                if event_type == "subagent.tool":
                     tools = min(_MAX_TOOLS, max(child["tools"], _as_int(payload.get("tool_count"), child["tools"] + 1)))
-                    changed |= (child["phase"], child["tools"]) != ("working", tools)
-                    child["phase"], child["tools"] = "working", tools
-                elif event_type == "subagent.complete":
+                    changed |= child["tools"] != tools
+                    child["tools"] = tools
+                if event_type == "subagent.complete":
                     child["phase"] = _phase_for(payload.get("status"))
                     duration = payload.get("duration_seconds")
                     child["elapsed"] = (
@@ -201,10 +202,6 @@ class SubagentActivityBoard:
                         else max(0.0, self._clock() - child["started_at"])
                     )
                     changed = True
-                elif event_type == "subagent.heartbeat":
-                    # The delegation heartbeat already runs every 30s. It gives a quiet child enough
-                    # board revisions to keep elapsed time useful without adding another timer.
-                    pass
             if not changed:
                 return False
             self._revision += 1
@@ -251,7 +248,7 @@ class SubagentActivityBoard:
                     # exception while editing the owned message remains safe to retry.
                     retryable = (editing and result is None) or bool(
                         getattr(result, "retryable", False)
-                    )
+                    ) or bool(getattr(result, "retry_after", None))
                     if not retryable:
                         with self._lock:
                             self._delivery_abandoned = True
@@ -307,6 +304,10 @@ class SubagentActivityBoard:
             logger.debug("subagent activity board delivery failed", exc_info=True)
             return None
         self._last_edit_at = self._clock()
+        raw = getattr(result, "raw_response", None)
+        if isinstance(raw, dict) and raw.get("skipped"):
+            # Telegram defers budget-limited edits without showing their text.
+            return SendResult(success=False, retryable=True, retry_after=self._min_edit_interval)
         if getattr(result, "success", False):
             if initial_send and self._message_id is None:
                 return result
@@ -381,6 +382,7 @@ def observe_subagent_activity(
             if not descriptor.supports_edit or not descriptor.supports_op("edit"):
                 return
         except Exception:
+            logger.debug("subagent status route capability check failed", exc_info=True)
             return
     try:
         board = ctx._subagent_activity_board

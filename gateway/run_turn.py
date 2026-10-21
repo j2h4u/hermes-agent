@@ -1088,11 +1088,7 @@ class GatewayTurnMixin(GatewayTurnPrepareMixin, GatewayTurnHygieneMixin, Gateway
         _thinking_enabled = _display_surface_mode(
             "thinking_progress", default=False, require_platform_override_for={Platform.MATTERMOST},
         ) != "off"
-        # Slack-native task cards need the progress queue even with text tool_progress off.
-        # Slack-native task cards (#29483): when the Slack adapter's opt-in is set, tool progress renders as
-        # native plan/task cards via chat.startStream — the progress queue is needed even though Slack keeps
-        # ordinary text tool_progress off by default (requiring both flags would silently leave the native
-        # feature inactive).
+        # Slack-native cards need the progress queue even when text tool progress defaults off.
         # Cards are still tool progress. Slack's TIER default (``off``) only quiets the text lane so
         # cards stay on for unconfigured installs, but an operator who WRITES ``tool_progress: off``
         # (global, platform override, or legacy overrides) has asked for no tool progress at all and
@@ -1107,12 +1103,6 @@ class GatewayTurnMixin(GatewayTurnPrepareMixin, GatewayTurnHygieneMixin, Gateway
                 _native_slack_task_cards = bool(adapter.native_task_cards_enabled())
             except Exception:
                 logger.debug("Slack native task-card config check failed", exc_info=True)
-        # display.subagent_activity_board: per-turn observability for direct subagents (Telegram).
-        # Independent of tool_progress: it renders structural state only, and detached children
-        # may keep updating their spawning turn's board after the foreground turn has ended.
-        subagent_activity_board_enabled = (
-            _display_surface_mode("subagent_activity_board", default=False) != "off"
-        )
         return self._RunAgentDisplay(
             user_config=user_config, platform_key=platform_key, enabled_toolsets=enabled_toolsets,
             disabled_toolsets=disabled_toolsets, resolve_display_setting=resolve_display_setting,
@@ -1123,7 +1113,7 @@ class GatewayTurnMixin(GatewayTurnPrepareMixin, GatewayTurnHygieneMixin, Gateway
             log_queue=queue.Queue() if log_mode_enabled else None,
             interim_assistant_messages_enabled=interim_assistant_messages_enabled,
             _thinking_enabled=_thinking_enabled, _native_slack_task_cards=_native_slack_task_cards,
-            subagent_activity_board_enabled=subagent_activity_board_enabled,
+            subagent_activity_board_enabled=_display_surface_mode("subagent_activity_board", default=False) != "off",
             needs_progress_queue=tool_progress_enabled or _thinking_enabled or _native_slack_task_cards,
             _generic_status_phrase=_generic_status_phrase,
         )
