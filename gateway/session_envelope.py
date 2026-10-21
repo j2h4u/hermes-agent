@@ -6,12 +6,12 @@ Relay snapshots bind the authenticated connector and exact source; replay rechec
 """
 import asyncio
 from copy import copy, deepcopy
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime
 import json
 import logging
 
-from gateway.platforms.event import MessageEvent, MessageType
+from gateway.platforms.event import MessageContextRef, MessageEvent, MessageType
 from gateway.session import SessionSource
 from gateway.session_ingress_media import capture_native_media, restore_native_media
 from hermes_state_runtime import RuntimeStoreError
@@ -230,6 +230,11 @@ def _snapshot_native(runner, event, provenance, fresh_roles=False, encoded_sourc
     # its fingerprint. Explicit context (including an empty skill list) is exact.
     envelope['event'].update({name: deepcopy(getattr(event, name)) for name in _CONTEXT_FIELDS
                               if getattr(event, name) is not None})
+    if event.context_refs:
+        envelope['event']['context_refs'] = [
+            {**asdict(ref), 'date': ref.date.isoformat() if ref.date is not None else None}
+            for ref in event.context_refs
+        ]
     if event.inherit_channel_pin is True:  # synthetic goal/resume turn reuses the session's pins (#126109)
         envelope['event']['inherit_channel_pin'] = True
     if metadata := _native_metadata(event):
@@ -284,10 +289,16 @@ def restore_native(payload, runner=None):
         # Epoch 0 pins the retry fingerprint of producers with no provider time (relay, webhook,
         # automation); the turn records local time, as main's arrival-stamped event did.
         timestamp = datetime.now()
+    event_fields = deepcopy(envelope['event'])
+    if 'context_refs' in event_fields:
+        event_fields['context_refs'] = [
+            MessageContextRef(**{**ref, 'date': datetime.fromisoformat(ref['date']) if ref.get('date') else None})
+            for ref in event_fields['context_refs']
+        ]
     event = MessageEvent(text=payload['text'], source=source, timestamp=timestamp,
                         message_type=MessageType(envelope.get('message_type', 'text')),
                         media_urls=restore_native_media(envelope.get('media', [])),
-                        **deepcopy(envelope['event']))
+                        **event_fields)
     if 'automation' in envelope:
         event.internal = True
         if envelope['automation'].get('heartbeat'):
