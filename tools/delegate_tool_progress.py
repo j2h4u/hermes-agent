@@ -120,10 +120,11 @@ _LEGACY_EVENT_MAP: dict[str, DelegateEvent] = {
 # Event → _ChildProgressRelay method name. Lifecycle strings are emitted by the orchestrator itself (not
 # DelegateEvent). Any other DelegateEvent (TASK_TOOL_STARTED and the reserved TASK_* values) takes the tool-started
 # path; None means "recognised but ignored".
-_LIFECYCLE_EVENTS = frozenset({"subagent.spawn_requested", "subagent.start", "subagent.complete", "subagent.text"})
+_LIFECYCLE_EVENTS = frozenset({"subagent.spawn_requested", "subagent.start", "subagent.heartbeat", "subagent.complete", "subagent.text"})
 _EVENT_HANDLERS: dict[Any, Optional[str]] = {
     "subagent.spawn_requested": "_on_spawn_requested",
     "subagent.start": "_on_start",
+    "subagent.heartbeat": "_on_heartbeat",
     "subagent.complete": "_on_complete",
     "subagent.text": "_on_text",
     DelegateEvent.TASK_THINKING: "_on_thinking",
@@ -373,6 +374,10 @@ class _ChildProgressRelay:
                 user_config=getattr(parent, "_notification_config", None),
             )
         self._relay("subagent.complete", preview=preview, **kwargs)
+
+    def _on_heartbeat(self, tool_name, preview, args, kwargs):
+        """Keep detached status age current on the existing liveness tick."""
+        self._relay("subagent.heartbeat")
 
     def _on_text(self, tool_name, preview, args, kwargs):
         # Streamed child reply text, relayed verbatim for gateway watch windows;

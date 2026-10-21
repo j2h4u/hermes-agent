@@ -901,6 +901,7 @@ display:
       # Show "iteration N/M, running: tool" in heartbeats and busy acks
       busy_ack_detail: true
       # Or quiet them entirely
+      subagent_activity_board: false
       interim_assistant_messages: false
       long_running_notifications: false
 ```

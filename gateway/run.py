@@ -4251,7 +4251,6 @@ class GatewayRunner(
 
     @dataclasses.dataclass
     class _RunAgentDisplay:
-        """Per-turn display / progress settings resolved by ``_run_agent_display_settings``."""
         user_config: Any = None
         platform_key: Any = None
         enabled_toolsets: Any = None
@@ -4268,6 +4267,7 @@ class GatewayRunner(
         interim_assistant_messages_enabled: Any = None
         _thinking_enabled: Any = None
         _native_slack_task_cards: Any = None
+        subagent_activity_board_enabled: bool = True
         needs_progress_queue: Any = None
         _generic_status_phrase: Any = None
 
