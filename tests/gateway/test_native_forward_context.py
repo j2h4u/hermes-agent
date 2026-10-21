@@ -1,6 +1,6 @@
 """Forward provenance survives durable command turns and gateway restarts."""
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -11,7 +11,7 @@ from gateway.session import SessionSource
 from gateway.session_envelope import _snapshot_native, restore_native
 
 
-@pytest.mark.parametrize('date', [None, datetime(2026, 10, 21, tzinfo=timezone.utc)])
+@pytest.mark.parametrize('date', [None, datetime(2026, 10, 21, tzinfo=UTC)])
 def test_forward_context_survives_durable_roundtrip(date):
     source = SessionSource(platform=Platform.TELEGRAM, chat_id='c1', user_id='u1')
     ref = MessageContextRef(kind='forward', origin_type='user', origin_name='Alice',
