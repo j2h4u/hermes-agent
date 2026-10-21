@@ -98,52 +98,11 @@ hermes-agent/
 **User state:** `~/.hermes/config.yaml` (settings), `.env` (secrets only), `logs/` (`hermes logs`);
 all profile-aware via `get_hermes_home()`.
 
-## Local Deploy Notes
+## Local deployment
 
-The local deploy checkout's `deploy` branch tracks `origin/deploy`; upstream
-code comes from `upstream/main`. Keep those remotes distinct when checking for
-updates:
+Read [LOCAL_FIXES.md](LOCAL_FIXES.md) for production deployment, retained downstream fixes,
+and the checks required when refreshing upstream.
 
-```bash
-git fetch upstream main
-git fetch origin deploy
-```
-
-Do not run `git fetch upstream origin`: `origin` is a refspec for the `upstream`
-remote, not the remote to update.
-
-The production Compose project is `/opt/docker/hermes-agent`; do not substitute
-the repository checkout's Compose file for it. For a later, explicitly approved
-RC build/deploy wave, select the RC checkout and verify the approved source
-revision before any build or deployment command:
-
-```bash
-export HERMES_SOURCE_DIR=/home/j2h4u/repos/j2h4u/hermes-agent-rc-v2026.9.7-20260908
-export EXPECTED_HERMES_GIT_SHA=<approved-RC-SHA>
-test "$(git -C "$HERMES_SOURCE_DIR" status --porcelain)" = ""
-test "$(git -C "$HERMES_SOURCE_DIR" rev-parse HEAD)" = "$EXPECTED_HERMES_GIT_SHA"
-```
-
-Only then may the separately approved workflow use
-`HERMES_SOURCE_DIR="$HERMES_SOURCE_DIR" /opt/docker/hermes-agent/build.sh`.
-For accepted local fixes and upstream updates, rebuilding, redeploying, and verifying
-the live gateway are part of completing the task (operator authorization, 2026-09-30).
-
-The live deployment is Telegram-first. The Compose dashboard is now an opt-in
-profile, so the default remains gateway-only, matching current production;
-enable it only when explicitly requested. Compresr is an external optional
-plugin, not a Hermes core dependency; keep local compatibility shims temporary
-and upstream-first.
-
-For this deployment, Hermes state is bind-mounted from `/home/j2h4u/.hermes`
-and provider keys (including `GROQ_API_KEY`) come from
-`/home/j2h4u/.hermes/.env`; behavioral settings belong in `config.yaml`. Never
-rebuild and restart the live gateway autonomously after accepted Hermes changes;
-no separate approval is required. Verify Telegram and configured MCP integrations
-after deployment. Do not restart for unrelated read-only investigations.
-
-**Dependency chain:** `tools/registry.py` (no deps) ← `tools/*.py` (register at import) ←
-`model_tools.py` (discovery) ← `run_agent.py`, `cli.py`, `batch_runner.py`, `environments/`.
 ### Facade + siblings layout
 
 Every former god file is a **facade** (public entry points + the names other packages import) plus
