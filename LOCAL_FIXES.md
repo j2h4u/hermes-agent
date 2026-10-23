@@ -1,9 +1,10 @@
 # Local deployment and retained fixes
 
 This is a short inventory of behavior we retain downstream, not a PR tracker.
-At each upstream refresh, compare these behaviors with the candidate and run the
-listed tests. Remove a local implementation only when the candidate provides the
-same behavior and its regression tests still pass. A closed or merged PR alone
+At each upstream refresh, compare these behaviors with the candidate source.
+The listed regression files document the contracts; do not repeat upstream's
+test suite during routine updates. Remove a local implementation only when the
+candidate provides the same behavior. A closed or merged PR alone
 does not establish that the selected upstream revision contains the fix. Do not
 revert an adopted commit blindly: that can undo the upstream implementation too.
 
@@ -15,7 +16,7 @@ revert an adopted commit blindly: that can undo the upstream implementation too.
 | Telegram DM topic directory | Read the configured topic directory with `hermes_yaml`; configured names take precedence over historical names. Keep until upstream covers local DM-topic discovery and naming. | `tests/gateway/test_channel_directory.py` |
 | SQLite transient read failures | Retry the SQLite NULL/no-more-rows and transient WAL-marker cases with transaction-aware handling. Keep until equivalent upstream handling passes the regressions. | `tests/hermes_state/test_no_more_rows_retry.py`, `tests/hermes_cli/test_state_db_guard.py` |
 | Slow integrity checks | Report actual SQLite integrity progress to the startup watchdog using bounded renewable leases; a large healthy database must not trigger a restart loop. | `tests/hermes_cli/test_integrity_check_watchdog.py` |
-| Remote file sync | Allow callers to request visible transport failures instead of silently accepting a failed sync. Keep while this behavior is absent upstream. | `tests/tools/test_file_sync.py` |
+| Remote file sync | External Compresr's Hermes cache calls `sync(force=True, raise_on_error=True)` to surface transport failures. Keep while upstream lacks this contract; an in-tree caller search alone misses this installed consumer. | `tests/tools/test_file_sync.py`, installed `compresr/integrations/hermes/cache.py` |
 | Local Docker runtime | Preserve image revision stamps, runtime UID/GID, root-safe operator shims, sealed PM/tool stores, small build contexts and graceful shutdown of every gateway slot. These are deployment adaptations; revisit each when upstream offers the same guarantees. | `tests/docker/`, `tests/pm/test_store_extensions.py`, `test_venv_store_identity.py`, `tests/scripts/test_docker_shutdown_wiring.py` |
 | External Compresr | Install the external package reproducibly and retain the absolute compression threshold plus Hermes YAML config loading in both the image and PM environments. Review/remove the guarded package patch when a newer Compresr supplies both behaviors. | `docker/patch_compresr_threshold.py --verify`, isolated image smoke |
 | Delegation delivery | Accept wakes when only the topic label changed, and re-offer stale unclaimed completions even while their owner lives. Sources: [#142257](https://github.com/NousResearch/hermes-agent/pull/142257) (`f636e21890e514a7941ab4726dc57019e51aad92`), [#140721](https://github.com/NousResearch/hermes-agent/pull/140721) (`b953202e55f9c35a2f43ebd08e78349788425729`), cherry-picked with source attribution. Remove local differences when upstream supplies each fix and its regression passes. | `tests/gateway/test_automation_notification_category.py`, `tests/tools/test_async_delegation_orphan_sweep.py` |
@@ -31,21 +32,24 @@ git fetch upstream main
 git fetch origin deploy
 ```
 
-Prepare and test the full upstream merge in a candidate checkout, preserve the
-behavior above, and inspect any pending-fix source commits before cherry-picking
-them with `-x`. Keep the result committed and the source checkout clean before a
-build. Preserve a rollback revision, image and database backup until live checks
-pass. Update the deployment branches after verification; do not rewrite published
-history merely to remove an upstream-adopted commit.
+Merge upstream into the clean integration checkout, preserve the behavior above,
+and inspect any pending-fix source commits before cherry-picking them with `-x`.
+For upstream changes, rely on upstream CI instead of rerunning its tests locally.
+Keep the result committed and the source checkout clean before a build. Do not
+create rollback branches, image archives or database copies for routine updates.
+Remove task-owned temporary resources when done. Update the deployment branch
+after deployment; do not rewrite published history merely to remove an
+upstream-adopted commit.
 
 Production Compose is `/opt/docker/hermes-agent`, not the repository Compose file.
 Its `build.sh` accepts `HERMES_SOURCE_DIR` and builds the source plus the external
 Compresr layer without restarting. `redeploy.sh` also switches the gateway. Verify
 the intended source revision before using either script. Accepted local fixes and
 upstream updates include rebuilding, deploying and verifying the live gateway;
-the operator has authorized this workflow. Do not restart for unrelated read-only
-investigations. Default deployment is gateway-only; enable the dashboard only on
-explicit request.
+the operator has authorized this workflow. An operator's hold on restarting stays
+in force until explicitly released: building an image does not authorize a
+restart. Do not restart for unrelated read-only investigations. Default deployment
+is gateway-only; enable the dashboard only on explicit request.
 
 State is mounted from `/home/j2h4u/.hermes` at `/opt/data`. Provider secrets,
 including `GROQ_API_KEY`, come from that home's `.env`; behavior belongs in
