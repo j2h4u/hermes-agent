@@ -410,11 +410,12 @@ RUN /opt/hermes/.venv/bin/python -m docker.build_agent
 
 # The local plugin layer verifies the exact source revision before installation.
 ARG HERMES_GIT_SHA=
+ARG HERMES_BASE_VERSION=unknown
 RUN if [ -n "$HERMES_GIT_SHA" ]; then \
         printf '%s\n' "$HERMES_GIT_SHA" > /opt/hermes/.hermes_build_sha; \
         /opt/hermes/.venv/bin/python scripts/write_install_stamp.py \
             --output /opt/hermes/install-stamp.json --commit "$HERMES_GIT_SHA" \
-            --base-version "$(/opt/hermes/.venv/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" \
+            --base-version "$HERMES_BASE_VERSION" \
             --source docker --distribution docker --update-mechanism external --runtime-dir tools; \
     fi
 
