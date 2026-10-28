@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import hermes_yaml as yaml
 
 from hermes_cli.config import get_hermes_home
+from hermes_cli.config_backend import ConfigBackendUnavailable, config_exists, read_config_doc
 from utils import atomic_json_write
 
 logger = logging.getLogger(__name__)
@@ -204,12 +205,9 @@ def _build_discord(adapter) -> list[dict[str, str]]:
 
 def _load_configured_telegram_dm_topics() -> list[dict[str, Any]]:
     config_path = get_hermes_home() / "config.yaml"
-    if not config_path.exists():
-        return []
     try:
-        with open(config_path, encoding="utf-8-sig") as stream:
-            config = yaml.safe_load(stream) or {}
-    except (OSError, yaml.YAMLError) as exc:
+        config = (read_config_doc(config_path) or {}) if config_exists(config_path) else {}
+    except (OSError, yaml.YAMLError, ConfigBackendUnavailable) as exc:
         logger.debug("Channel directory: failed to read Telegram dm_topics config: %s", exc)
         return []
     topics = config.get("platforms", {}).get("telegram", {}).get("extra", {}).get("dm_topics", [])

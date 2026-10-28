@@ -20,4 +20,3 @@ def test_heartbeat_relays_a_structural_progress_tick():
     _Heartbeat(child, parent, 0).tick()
 
     assert relayed == [("subagent.heartbeat", (), {})]
-

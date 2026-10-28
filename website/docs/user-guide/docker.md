@@ -192,6 +192,33 @@ An unauthenticated public dashboard was the entry point for the June 2026 MCP-co
 
 Running the dashboard as a separate container **is** supported when that container shares the host PID and network namespace (e.g. `network_mode: host`, as the repo's own `docker-compose.yml` does — see its `dashboard` service). Its gateway-liveness detection requires a shared PID namespace with the gateway process, so the limitation only applies to dashboards run in isolated bridge-network containers without a shared PID namespace.
 
+## Running the Webapp
+
+The image ships the [Webapp](./desktop.md) (Hermes Desktop in a browser) prebuilt; the gateway serves it on its own port when the mounted `config.yaml` turns it on (see [Configuration → Webapp](./configuration.md#webapp)):
+
+```yaml
+webapp:
+  enabled: true
+  host: 0.0.0.0
+  port: 9120
+  public_url: "http://localhost:9120"  # the address your browser opens
+```
+
+Publish the port and configure a sign-in provider, as for the dashboard:
+
+```sh
+docker run -d \
+  --name hermes \
+  --restart unless-stopped \
+  -v ~/.hermes:/opt/data \
+  -p 9120:9120 \
+  -e HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin \
+  -e HERMES_DASHBOARD_BASIC_AUTH_PASSWORD="$(openssl rand -hex 16)" \
+  nousresearch/hermes-agent gateway run
+```
+
+A non-loopback `host` needs one of the [dashboard's auth providers](#running-the-dashboard), and the listener refuses to start without one. Without `public_url`, links printed by `hermes webapp` inside the container use the container's own address, not the published one.
+
 ## Running interactively (CLI chat)
 
 To open an interactive chat session against a running data directory:
@@ -544,7 +571,7 @@ The image uses Debian 13.4 and includes:
 - The curated extras `all`, `messaging`, `otlp`, `anthropic`, `bedrock`,
   `azure-identity`, and `matrix`. This is not `--all-extras`.
 - Node.js 26 and npm from the digest-pinned Node source image.
-- PM-pinned uv, full Chromium, FFmpeg, and ripgrep in `/opt/hermes/.runtime/tools`.
+- PM-pinned uv, full Chromium, FFmpeg, and ripgrep in `/opt/hermes/tools`.
 - System Git, OpenSSH, Docker CLI, and Chromium shared libraries.
 - Prebuilt TUI/dashboard assets and baked Photon sidecar dependencies.
 - s6-overlay for supervision and zombie-process cleanup.
@@ -552,7 +579,7 @@ The image uses Debian 13.4 and includes:
 Chromium is staged through PM, not `npx playwright install`. The build records
 its resolved executable in `/etc/hermes/chromium-executable-path`, which Hermes
 reads when it launches the browser.
-`PLAYWRIGHT_BROWSERS_PATH` names `/opt/hermes/.runtime/tools`, outside the data mount.
+`PLAYWRIGHT_BROWSERS_PATH` names `/opt/hermes/tools`, outside the data mount.
 
 Every image, including the unsuffixed (non-`-desktop`) tags, carries the full
 Chromium build rather than Playwright's lighter headless shell: one pinned,

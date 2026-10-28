@@ -27,7 +27,9 @@ assert (Path('/opt/hermes') / manifest['runtime']['toolsDir']).resolve() == stor
 assert sealed() and writable_store_root() != store
 with tempfile.TemporaryDirectory() as directory:
     _copy_core_inputs(Path('/opt/hermes'), Path(directory))
-    assert not (Path(directory) / store.relative_to('/opt/hermes')).exists(), 'the tool store entered a plugin source snapshot'
+    snapshot_store = Path(directory) / store.relative_to('/opt/hermes')
+    assert (snapshot_store / '__init__.py').is_file()
+    assert all(not (snapshot_store / name).exists() for name in Facts(store / 'facts.json').entries_in_use()), 'tool binaries entered a plugin source snapshot'
 assert not list(store.glob('fetch-*')), 'completed download archives must not ship'
 fact = Facts(store / 'facts.json').get('python')
 expected = get_package('python').binary(store / fact['entry'], current_target())

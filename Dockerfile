@@ -57,15 +57,13 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # The pm-pinned full Chromium lives in the managed tool store at
-# /opt/hermes/.runtime/tools — inside the sealed payload but under a hidden
-# source directory, so plugin dependency snapshots do not copy the browser
-# and toolchain into every writable generation. The build-time install
-# survives the /opt/data volume overlay at runtime. pm's
+# /opt/hermes/tools — outside the /opt/data volume mount, so the
+# build-time install survives the volume overlay at runtime. pm's
 # chromium package fact exports the same value (PLAYWRIGHT_BROWSERS_PATH
 # at the store root); the image ENV names the same directory so
 # Playwright and the browser tool resolve the pinned build even before pm
 # composes tool env.
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.runtime/tools
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/tools
 
 # Install system dependencies in one layer, clear APT cache.
 # tini was previously PID 1 to reap orphaned zombie processes (MCP stdio
@@ -210,8 +208,8 @@ WORKDIR /opt/hermes
 # a pin consumer: the stdlib-only pm provisioner reads pm/lock.json and
 # stages the pinned uv + full Chromium (sha256-verified at
 # download — the same code path pm.sh/pm.ps1 and the desktop payload use)
-# into the image's own runtime dir, a self-contained hidden store baked
-# inside the sealed /opt/hermes payload but outside copied source packages.
+# into the image's own runtime dir, a self-contained store baked under
+# /opt/hermes, outside the /opt/data volume so it survives the overlay.
 # PM alone resolves the pinned uv for dependency preparation; build consumers
 # receive Python environments, never an installer executable.
 #
@@ -224,7 +222,7 @@ WORKDIR /opt/hermes
 # arm64), so it is resolved at build time and never hunted at boot.
 # hermes_cli/browser_runtime.py reads it when a volume over the runtime dir
 # hides pm's facts; stage2-hook.sh checks it still names a binary.
-ENV HERMES_RUNTIME_DIR=/opt/hermes/.runtime/tools
+ENV HERMES_RUNTIME_DIR=/opt/hermes/tools
 COPY pm/ pm/
 # pm's lazy imports resolve get_default_hermes_root()/project_venv_dir()
 # from hermes_constants (stdlib-only) at install time — a sealed-stage
@@ -346,6 +344,22 @@ COPY --from=icons /tmp/hermes-icons /tmp/hermes-icons
 RUN node scripts/build/tui.mjs --source /opt/hermes --out /opt/products/tui && \
     node scripts/build/web.mjs --source /opt/hermes --icons /tmp/hermes-icons --out /opt/products/web
 
+# The Webapp (the browser-hosted Desktop) builds through its source recipe,
+# which installs Desktop's dependencies in a private workspace. A stage of its
+# own so Desktop changes leave the TUI and dashboard layers cached.
+FROM runtime_base AS webapp_build
+COPY package.json package-lock.json .npmrc ./
+COPY apps/desktop/package.json apps/desktop/
+COPY apps/desktop/scripts/build-webapp.mjs apps/desktop/scripts/
+COPY apps/shared/package.json apps/shared/
+COPY scripts/build/*.mjs scripts/build/
+ENV npm_config_install_links=false
+# Dependencies first, keyed only by the manifests and the recipe, so a source
+# change reuses this layer and the build below reuses its install.
+RUN node apps/desktop/scripts/build-webapp.mjs --deps-only
+COPY apps/ apps/
+RUN node apps/desktop/scripts/build-webapp.mjs
+
 FROM python_deps AS runtime
 # Standalone TypeScript linting is a runtime feature; Vite/esbuild are not.
 COPY --from=frontend_build /opt/hermes/node_modules/typescript /opt/hermes/node_modules/typescript
@@ -371,6 +385,7 @@ RUN cd plugins/platforms/photon/sidecar && \
 # Shared product outputs are independent of application dependency assembly.
 COPY --from=frontend_build /opt/products/tui /opt/hermes/ui-tui
 COPY --from=frontend_build /opt/products/web /opt/hermes/hermes_cli/web_dist
+COPY --from=webapp_build /opt/hermes/apps/desktop/dist-webapp /opt/hermes/apps/desktop/dist-webapp
 # ---------- Bot Screen X socket directory ----------
 # Xvnc would create this itself (/tmp is 1777); pre-creating it keeps ownership
 # deterministic when HERMES_UID is remapped between boots.
@@ -400,7 +415,7 @@ RUN if [ -n "$HERMES_GIT_SHA" ]; then \
         /opt/hermes/.venv/bin/python scripts/write_install_stamp.py \
             --output /opt/hermes/install-stamp.json --commit "$HERMES_GIT_SHA" \
             --base-version "$(/opt/hermes/.venv/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" \
-            --source docker --distribution docker --update-mechanism external --runtime-dir .runtime/tools; \
+            --source docker --distribution docker --update-mechanism external --runtime-dir tools; \
     fi
 
 # Wire the exec shims and install-method stamp. Files under /opt/hermes are
@@ -548,7 +563,7 @@ ENV PATH="/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:${PATH}"
 # image these are shared, non-secret package metadata, read by UID 10000.
 # uv's environment locks are build-only and may be world-writable. Remove
 # them after all builds; never relax permissions on mutable PM/home state.
-RUN mkdir -p /opt/data && chmod 0644 /opt/hermes/.runtime/tools/facts.json && \
+RUN mkdir -p /opt/data && chmod 0644 /opt/hermes/tools/facts.json && \
     rm -f /opt/hermes/.venv/.lock /opt/hermes/pm-runtime/.lock
 # Build helpers use system Python above; TUI gateway children need the sealed runtime.
 ENV HERMES_PYTHON=/opt/hermes/.venv/bin/python
