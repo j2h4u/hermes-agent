@@ -6659,8 +6659,7 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
             pending[key] = event
             return
         existing.absorb_reply_expected(event)
-        existing.media_urls.extend(event.media_urls)
-        existing.media_types.extend(event.media_types)
+        existing.extend_media(event)
         if getattr(event, "context_refs", None):
             existing.context_refs.extend(event.context_refs)
         if event.text:
