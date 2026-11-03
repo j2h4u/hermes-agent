@@ -16,11 +16,13 @@ def test_meet_bot_uses_chromium_sandbox(tmp_path, monkeypatch):
     sync_api.sync_playwright = lambda: playwright
     monkeypatch.setitem(sys.modules, "playwright", ModuleType("playwright"))
     monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
+    monkeypatch.setattr(meet_bot, "chromium_executable", lambda: "/pm/chromium")
     monkeypatch.setenv("HERMES_MEET_URL", "https://meet.google.com/abc-defg-hij")
     monkeypatch.setenv("HERMES_MEET_OUT_DIR", str(tmp_path))
     monkeypatch.setenv("HERMES_MEET_MODE", "transcribe")
     assert meet_bot.run_bot() == 1
     assert chromium.launch.call_args.kwargs["chromium_sandbox"] is True
+    assert chromium.launch.call_args.kwargs["executable_path"] == "/pm/chromium"
 
 
 def test_meet_auth_uses_chromium_sandbox(tmp_path, monkeypatch):
@@ -34,6 +36,8 @@ def test_meet_auth_uses_chromium_sandbox(tmp_path, monkeypatch):
     sync_api.sync_playwright = lambda: playwright
     monkeypatch.setitem(sys.modules, "playwright", ModuleType("playwright"))
     monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
+    monkeypatch.setattr(cli, "chromium_executable", lambda: "/pm/chromium")
     monkeypatch.setattr(cli, "_auth_state_path", lambda: tmp_path / "auth.json")
     assert cli._cmd_auth() == 1
     assert chromium.launch.call_args.kwargs["chromium_sandbox"] is True
+    assert chromium.launch.call_args.kwargs["executable_path"] == "/pm/chromium"
