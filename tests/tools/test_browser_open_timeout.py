@@ -24,6 +24,12 @@ class TestOpenCommandTimeout:
 
 class TestSandboxBypass:
 
+    def test_non_root_docker_can_use_sandbox(self, monkeypatch):
+        monkeypatch.setattr(browser_launcher.os, "geteuid", lambda: 1000, raising=False)
+        monkeypatch.setattr(browser_launcher, "running_in_docker", lambda: True)
+        monkeypatch.setattr(browser_launcher, "apparmor_restricts_unprivileged_userns", lambda: False)
+        assert browser_launcher.needs_chromium_sandbox_bypass() is False
+
     def test_apparmor_userns_triggers_bypass(self, monkeypatch, tmp_path):
         monkeypatch.setattr(browser_launcher, "running_in_docker", lambda: False)
         # Non-root, so only the AppArmor sysctl can answer True.

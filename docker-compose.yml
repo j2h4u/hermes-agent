@@ -38,6 +38,9 @@ services:
     restart: unless-stopped
     # Must outlast the 250s dynamic-gateway drain and 255s s6 finish-hook bound.
     stop_grace_period: 270s
+    # Chromium's sandbox requires user namespaces under Docker's seccomp policy.
+    security_opt:
+      - seccomp:./tools/environments/chromium-seccomp.json
     network_mode: host
     volumes:
       - ~/.hermes:/opt/data
@@ -72,6 +75,8 @@ services:
     container_name: hermes-dashboard
     restart: unless-stopped
     stop_grace_period: 270s
+    security_opt:
+      - seccomp:./tools/environments/chromium-seccomp.json
     network_mode: host
     depends_on:
       - gateway

@@ -732,6 +732,12 @@ class DockerEnvironment(BaseEnvironment):
                 image)
         security_args = _build_security_args(
             run_as_host_user and bool(user_args), run_exec=image_uses_s6_init, snap_compat=snap_compat)
+        from hermes_cli.config_defaults import DEFAULT_SANDBOX_IMAGE
+        if image == DEFAULT_SANDBOX_IMAGE and not any(
+            arg.startswith(("seccomp=", "--security-opt=seccomp=")) for arg in validated_extra
+        ):
+            profile = Path(__file__).with_name("chromium-seccomp.json")
+            security_args += ["--security-opt", f"seccomp={profile}"]
         self._snap_compat = snap_compat
         if snap_compat:
             logger.warning(

@@ -122,10 +122,8 @@ def running_in_docker() -> bool:
 
 
 def needs_chromium_sandbox_bypass() -> bool:
-    """True when Chromium needs --no-sandbox to start reliably (root, Docker, AppArmor userns)."""
+    """True when Chromium needs --no-sandbox to start reliably (root or AppArmor userns)."""
     if hasattr(os, "geteuid") and os.geteuid() == 0:
-        return True
-    if running_in_docker():
         return True
     return apparmor_restricts_unprivileged_userns()
 
@@ -231,7 +229,7 @@ def build_chromium_argv(executable: str, user_data_dir: str, *, packaged: bool, 
                         sandbox_bypass: bool, extra_args=()) -> list[str]:
     """The launch argv (pure in its inputs + host sandbox facts + ``browser.chromium_args``).
 
-    ``sandbox_bypass`` lets the host policy (root, Docker, AppArmor userns) add
+    ``sandbox_bypass`` lets the host policy (root or AppArmor userns) add
     ``CHROMIUM_SANDBOX_BYPASS_ARGS``; it is False for the user's own browser binary, which is never
     started without its sandbox."""
     argv = [executable, "--remote-debugging-port=0", f"--user-data-dir={user_data_dir}", *_BASE_FLAGS]

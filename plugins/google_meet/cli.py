@@ -206,7 +206,7 @@ def _cmd_auth() -> int:
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(
-                channel="chromium", executable_path=chromium_executable(), headless=False,
+                channel="chromium", executable_path=chromium_executable(), headless=False, chromium_sandbox=True,
             )
             context = browser.new_context()
             context.new_page().goto("https://accounts.google.com/", wait_until="domcontentloaded")

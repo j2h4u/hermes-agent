@@ -110,12 +110,12 @@ _STOP_SCRIPT = (
 def _start_chromium(env, user, exe: str, udd: str, child_env: dict) -> tuple[int, Optional[str]]:
     """Launch detached in the sandbox; returns its sandbox pid and start time (None when unreadable)."""
     from tools.bot_desktop.browser import SHARED_PROFILE_ARGS
+    from tools.bot_desktop import sandbox_host
     from tools.browser_launcher import CHROMIUM_SANDBOX_BYPASS_ARGS, build_chromium_argv
     from tools.environments import streams
-    # Container: no user namespaces for Chromium's own sandbox, so the bypass flags always apply (this
-    # host's facts say nothing about the sandbox); the shared-profile flags match the dock's icon.
+    flags = SHARED_PROFILE_ARGS if sandbox_host.default_docker_browser(env) else (*SHARED_PROFILE_ARGS, *CHROMIUM_SANDBOX_BYPASS_ARGS)
     argv = build_chromium_argv(exe, udd, packaged=False, headed=True, sandbox_bypass=False,
-                               extra_args=(*SHARED_PROFILE_ARGS, *CHROMIUM_SANDBOX_BYPASS_ARGS))
+                               extra_args=flags)
     argv = list(dict.fromkeys(argv))
     # setsid execs in place (a background child of a non-interactive shell leads no process group), so $! is
     # Chromium itself, and its start time is fixed from the fork on.
@@ -169,7 +169,7 @@ def create_sandbox_session(cache_key: str) -> dict[str, Any]:
     from tools.browser_session import _session_record
     from tools.environments import streams
     env, published = _sandbox()
-    user = sandbox_host._user_for(env)
+    user = sandbox_host.browser_user(env)
     udd = sandbox_host.browser_profile_dir(env)
     key = _shared_key(env, udd)
     with _key_lock(key):

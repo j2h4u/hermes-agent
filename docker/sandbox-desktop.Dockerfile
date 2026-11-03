@@ -43,14 +43,14 @@ RUN apt-get -o Acquire::Retries=3 update && \
         at-spi2-core libgtk-3-0 libnss3 libasound2 libxss1 && \
     rm -rf /var/lib/apt/lists/*
 
-# Headed Chromium through Playwright (the same build the Hermes -desktop image
-# uses), so the agent's browser and the dock's Browser icon share one binary and
-# one --user-data-dir: tools/bot_desktop/sandbox_host.py finds it under
-# /opt/playwright. --with-deps pulls the Chromium runtime libraries.
-RUN for i in 1 2 3; do \
-        npx --yes playwright@1 install --with-deps chromium && break || \
-        { [ "$i" = 3 ] && exit 1; echo "playwright chromium install failed (attempt $i); retrying in 10s"; sleep 10; }; \
-    done && chmod -R a+rX /opt/playwright
+# PM stages the same verified browser as the gateway; Playwright supplies OS libraries only.
+COPY pm/ /opt/hermes-pm/pm/
+COPY hermes_constants.py /opt/hermes-pm/
+COPY hermes_cli/__init__.py hermes_cli/runtime_state.py /opt/hermes-pm/hermes_cli/
+COPY scripts/bundles/payload.py /opt/hermes-pm/scripts/bundles/payload.py
+RUN npx --yes playwright@1.64.1 install-deps chromium && \
+    cd /opt/hermes-pm && HERMES_RUNTIME_DIR=/opt/playwright python3 -c 'from pm import ensure; ensure("chromium", explicit=True)' && \
+    chmod -R a+rX /opt/playwright
 
 # cua-driver: computer_use's MCP driver. Pinned release tarball from the
 # cua-driver-rs-v* tags (never releases/latest: prereleases publish 0 assets).

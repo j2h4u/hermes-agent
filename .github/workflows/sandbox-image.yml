@@ -16,6 +16,8 @@ on:
     paths:
       - docker/sandbox-desktop.Dockerfile
       - docker/sandbox-desktop-smoke.sh
+      - tools/environments/chromium-seccomp.json
+      - pm/**
       - .github/workflows/sandbox-image.yml
   release:
     types: [published]

@@ -244,12 +244,13 @@ def test_root_dock_browser_starts_with_the_same_sandbox_args_as_the_agents_brows
     assert agent_flags, "root must inject sandbox flags for the agent's Chromium"
     assert agent_flags <= set(browser.dock_argv("/opt/chrome", "/p/dir"))
 
-    # Same policy for the NON-root container case (the official image runs the gateway as uid 10000 in
-    # Docker): the agent's launch bypasses the sandbox there, and the dock icon must too or it dies on click.
+    # The non-root container uses the same sandbox policy as the agent.
     monkeypatch.setattr(launcher.os, "geteuid", lambda: 10000)
     monkeypatch.setattr(launcher, "running_in_docker", lambda: True)
+    monkeypatch.setattr(launcher, "apparmor_restricts_unprivileged_userns", lambda: False)
     docker_flags = _agent_sandbox_flags("/opt/chrome")
-    assert docker_flags and docker_flags <= set(browser.dock_argv("/opt/chrome", "/p/dir"))
+    assert not docker_flags
+    assert "--no-sandbox" not in browser.dock_argv("/opt/chrome", "/p/dir")
     monkeypatch.setattr(launcher, "running_in_docker", lambda: False)
     monkeypatch.setattr(launcher, "apparmor_restricts_unprivileged_userns", lambda: False)
     assert "--no-sandbox" not in browser.dock_argv("/opt/chrome", "/p/dir")  # seated non-root host: sandboxed

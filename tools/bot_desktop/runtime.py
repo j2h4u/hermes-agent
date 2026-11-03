@@ -871,7 +871,10 @@ def _start_in_sandbox(wait_seconds: float) -> DesktopStatus:
         # uses there: the human's browser is the bot's browser, as on the host.
         from tools.bot_desktop.browser import dock_exec_line
         exe = sandbox_host.chromium_executable(env)
-        browser = (exe, dock_exec_line(exe, sandbox_host.browser_profile_dir(env), sandbox_bypass=True)) if exe else (None, None)
+        if exe:
+            sandbox_host.browser_user(env)
+        browser = (exe, dock_exec_line(exe, sandbox_host.browser_profile_dir(env),
+                                     sandbox_bypass=not sandbox_host.default_docker_browser(env))) if exe else (None, None)
         published = sandbox_host.start(env, _profile_name(), geometry=geometry(), wait_seconds=max(wait_seconds, 20.0),
                                        browser_exec=browser[0], browser_exec_line=browser[1])
     (sd / "env").write_text("".join(f"{k}={v}\n" for k, v in published.items()), encoding="utf-8")

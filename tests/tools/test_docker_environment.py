@@ -77,6 +77,21 @@ def test_ensure_docker_available_raises_when_not_found(monkeypatch):
         _make_dummy_env()
 
 
+@pytest.mark.parametrize(("image", "extra", "expected"), [
+    ("nousresearch/hermes-sandbox:desktop", [], True),
+    ("custom:desktop", [], False),
+    ("nousresearch/hermes-sandbox:desktop", ["--security-opt", "seccomp=/custom.json"], False),
+    ("nousresearch/hermes-sandbox:desktop", ["--security-opt=seccomp=/custom.json"], False),
+])
+def test_desktop_seccomp_respects_custom_images_and_overrides(monkeypatch, image, extra, expected):
+    monkeypatch.setattr(docker_env, "find_docker", lambda: "/usr/bin/docker")
+    calls = _mock_subprocess_run(monkeypatch)
+    _make_dummy_env(image=image, extra_args=extra)
+    command = next(cmd for cmd, _ in calls if len(cmd) >= 2 and cmd[1] == "run")
+    assert any("chromium-seccomp.json" in arg for arg in command) is expected
+    assert "no-new-privileges" in command
+
+
 def test_auto_mount_host_cwd_adds_volume(monkeypatch, tmp_path):
     """Opt-in docker cwd mounting should bind the host cwd to /workspace."""
     project_dir = tmp_path / "my-project"

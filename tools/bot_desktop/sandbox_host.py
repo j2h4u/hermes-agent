@@ -139,7 +139,7 @@ def browser_profile_dir(env: Any) -> str:
 _CHROMIUM_PROBE = (
     'for d in "${PLAYWRIGHT_BROWSERS_PATH:-}" /opt/playwright "$HOME/.cache/ms-playwright"; do'
     ' [ -n "$d" ] || continue;'
-    ' for c in "$d"/chromium-*/chrome-linux/chrome "$d"/chromium-*/chrome-linux64/chrome; do'
+    ' for c in "$d"/chromium-*/chrome-linux/chrome "$d"/chromium-*/chrome-linux64/chrome "$d"/chromium-*/chrome-linux-arm64/chrome; do'
     ' [ -x "$c" ] && { printf %s "$c"; exit 0; }; done; done; exit 1'
 )
 
@@ -194,6 +194,23 @@ def _user_for(env: Any) -> Optional[str]:
     probe = streams.run_in(env, ["id", "-u", DESKTOP_USER], timeout=15)
     user = DESKTOP_USER if probe.returncode == 0 else None
     env._bd_desktop_user = user
+    return user
+
+
+def default_docker_browser(env: Any) -> bool:
+    from hermes_cli.config_defaults import DEFAULT_SANDBOX_IMAGE
+    from tools.environments.docker import DockerEnvironment
+
+    return isinstance(env, DockerEnvironment) and env._image == DEFAULT_SANDBOX_IMAGE
+
+
+def browser_user(env: Any) -> Optional[str]:
+    user = _user_for(env)
+    if default_docker_browser(env):
+        probe = streams.run_in(env, ["id", "-u"], user=user, timeout=15) if user else None
+        uid = probe.stdout.strip() if probe and probe.returncode == 0 else b""
+        if not uid.isdigit() or int(uid) == 0:
+            raise RuntimeError("the sandbox needs an unprivileged pn user to run Chromium")
     return user
 
 

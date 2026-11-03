@@ -17,7 +17,7 @@ NAME="sbx-smoke-$$"
 cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-docker run -d --name "$NAME" --memory=4g "$IMAGE" >/dev/null
+docker run -d --name "$NAME" --memory=4g --security-opt "seccomp=$HERE/tools/environments/chromium-seccomp.json" "$IMAGE" >/dev/null
 
 echo "== 1. binaries (as pn)"
 docker exec -u pn "$NAME" bash -c '
@@ -78,13 +78,10 @@ print("   RFB 3.8, security types", types)
 EOF
 
 echo "== 4. headed Chromium opens on the display"
-# Docker's default seccomp profile denies unprivileged user namespaces, so Chromium's own
-# layer-2 sandbox cannot start in any container; the container is the sandbox. The gateway's
-# launcher already injects this (tools/browser_launcher.needs_chromium_sandbox_bypass).
 docker exec -u pn "$NAME" bash -c '
   set -e; set -a; . /tmp/bd/env; set +a
   chrome=$(ls /opt/playwright/chromium-*/chrome-linux*/chrome | head -1)
-  timeout 40 "$chrome" --no-sandbox --disable-dev-shm-usage --no-first-run --disable-gpu \
+  timeout 40 "$chrome" --disable-dev-shm-usage --no-first-run --disable-gpu \
       --user-data-dir=/tmp/bd/chrome about:blank >/tmp/bd/chrome.log 2>&1 &
   for _ in $(seq 1 60); do
     for w in $(xprop -root _NET_CLIENT_LIST 2>/dev/null | grep -o "0x[0-9a-f]*"); do
@@ -93,4 +90,12 @@ docker exec -u pn "$NAME" bash -c '
     sleep 0.5
   done
   cat /tmp/bd/chrome.log; exit 1'
+docker exec "$NAME" bash -c '
+  for pid in $(pgrep -f -- "--type=renderer"); do
+    [ "$(readlink /proc/"$pid"/ns/user)" != "$(readlink /proc/1/ns/user)" ] || continue
+    [ "$(readlink /proc/"$pid"/ns/pid)" != "$(readlink /proc/1/ns/pid)" ] || continue
+    filters=$(awk "/^Seccomp_filters:/ {print \$2}" /proc/"$pid"/status)
+    [ "${filters:-0}" -ge 2 ] && exit 0
+  done
+  echo "no Chromium renderer with user/PID namespaces and seccomp-BPF" >&2; exit 1'
 echo "OK: $IMAGE"

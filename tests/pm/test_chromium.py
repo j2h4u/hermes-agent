@@ -19,7 +19,7 @@ def test_browser_default_and_bundle_ship_full_chromium_only():
 
 @pytest.mark.parametrize(("target", "relative"), [
     ("linux-x64", "chrome-linux64/chrome"),
-    ("linux-arm64", "chrome-linux/chrome"),
+    ("linux-arm64", "chrome-linux-arm64/chrome"),
     ("darwin-arm64", "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"),
     ("win32-x64", "chrome-win64/chrome.exe"),
     ("win32-arm64", "chrome-win64/chrome.exe"),

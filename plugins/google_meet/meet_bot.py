@@ -475,7 +475,7 @@ def run_bot() -> int:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(
                 channel="chromium", executable_path=chromium_executable(),
-                headless=not cfg.headed, args=chrome_args,
+                headless=not cfg.headed, args=chrome_args, chromium_sandbox=True,
             )
             context = browser.new_context(**context_args)
             page = context.new_page()
