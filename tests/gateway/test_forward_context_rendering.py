@@ -16,7 +16,7 @@ async def test_user_context_refs_expand_before_untrusted_forward_metadata():
     runner._consume_pending_native_image_paths = lambda _key: []
     runner._prefix_inbound_sender_context = lambda _event, _source, text: text
     runner._classify_inbound_media = lambda _event, _pending: ([], [], [], [])
-    runner._prepend_inbound_media_file_notes = lambda text, _audio, _video: text
+    runner._prepend_inbound_media_file_notes = lambda text, _audio, _video, original_names=None: text
     runner._prepend_inbound_document_notes = lambda _event, text: text
     runner._prepend_inbound_reply_context = lambda _event, _source, text: text
 
@@ -53,7 +53,7 @@ async def test_forward_envelope_precedes_reply_context():
     runner._consume_pending_native_image_paths = lambda _key: []
     runner._prefix_inbound_sender_context = lambda _event, _source, text: text
     runner._classify_inbound_media = lambda _event, _pending: ([], [], [], [])
-    runner._prepend_inbound_media_file_notes = lambda text, _audio, _video: text
+    runner._prepend_inbound_media_file_notes = lambda text, _audio, _video, original_names=None: text
     runner._prepend_inbound_document_notes = lambda _event, text: text
 
     source = SessionSource(platform=Platform.TELEGRAM, chat_id="123")

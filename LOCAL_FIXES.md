@@ -20,10 +20,23 @@ revert an adopted commit blindly: that can undo the upstream implementation too.
 | Remote file sync | External Compresr's Hermes cache calls `sync(force=True, raise_on_error=True)` to surface transport failures. Keep while upstream lacks this contract; an in-tree caller search alone misses this installed consumer. | `tests/tools/test_file_sync.py`, installed `compresr/integrations/hermes/cache.py` |
 | Local Docker runtime | Preserve image revision stamps with canonical release versions, runtime UID/GID, root-safe operator shims and graceful shutdown of every gateway slot. `build.sh` passes `HERMES_BASE_VERSION` from the source's canonical Git version; never use pyproject's `0.0.0` placeholder, which falsely rejects compatible plugins. Retain local build choices: Kazakhstan Debian mirror, Firecrawl/Exa/Edge TTS extras, recursive bytecode/runtime exclusions, opt-in dashboard and test-container volume cleanup. Sealed stores and their snapshot exclusions now use upstream code/layout. | `tests/docker/`, `tests/scripts/test_docker_shutdown_wiring.py` |
 | External Compresr | Install the external package reproducibly and retain the absolute compression threshold plus Hermes YAML config loading in both the image and PM environments. Review/remove the guarded package patch when a newer Compresr supplies both behaviors. | `docker/patch_compresr_threshold.py --verify`, isolated image smoke |
-| Delegation delivery | Re-offer stale unclaimed completions even while their owner lives. Source: [#140721](https://github.com/NousResearch/hermes-agent/pull/140721) (`b953202e55f9c35a2f43ebd08e78349788425729`), cherry-picked with source attribution. Topic-label wake handling now comes from upstream route-key admission, not our former implementation. | `tests/tools/test_async_delegation_orphan_sweep.py`, upstream `tests/gateway/test_automation_wake_route.py` with retained topic-label coverage |
 | Detached Telegram status | One editable structural status message per parent turn, surviving detached children. Source: [#90677](https://github.com/NousResearch/hermes-agent/pull/90677), cherry-picked with attribution and adapted for Telegram deferred edits/flood waits. Remove when upstream has equivalent lifecycle, routing and retry behavior. | `tests/gateway/test_subagent_activity_board.py` |
 
-## Latest full overlay audit — 2026-10-28
+## Latest full overlay audit — 2026-11-03
+
+Refreshed against upstream `c314285f07`. Retired our live-owner completion recovery
+implementation and its early-replay assertion: upstream `6a065c1a58` adopted the fix,
+and `8a10a3cbef`, `b847741865` and `e48531be29` add lost-copy checks, held-copy and
+per-offer leases, and completed-record context release. Use upstream's implementation
+and regression coverage unchanged. The detached Telegram activity board and its child
+heartbeat forwarding remain local; reliable delivery and progress display are separate.
+
+Retained the other behaviors above after comparing all downstream source differences.
+Combined upstream's Telegram reply-expectation handling with retained provenance, and
+adapted the local rendering fixtures to the new original-media-name parameter. Included
+upstream's FAL/documents Docker extras alongside the local service extras.
+
+## Previous full overlay audit — 2026-10-28
 
 Compared all downstream files, including tests, generated contracts, documentation and
 deployment choices, against upstream `ee7e0f5172`. No additional unclassified behavior
