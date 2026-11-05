@@ -483,10 +483,12 @@ RUN set -eu; \
     python3 -c 'import json, pathlib, tomllib; project = tomllib.loads(pathlib.Path("/opt/hermes/pyproject.toml").read_text(encoding="utf-8"))["project"]; stamp = json.loads(pathlib.Path("/opt/hermes/install-stamp.json").read_text(encoding="utf-8")); commit = stamp.get("commit"); revision = commit if commit and set(commit) != {"0"} else None; marker = pathlib.Path("/etc/hermes/image-provenance.json"); marker.write_text(json.dumps({"schema": 1, "deployment_kind": "image", "manager": "docker", "image": "nousresearch/hermes-agent", "version": project["version"], "revision": revision}, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"); marker.chmod(0o444)'
 
 # ---------- s6-overlay service wiring ----------
-# Static services declared at build time: main-hermes + dashboard.
-# Per-profile gateway services are registered dynamically at runtime by
-# the profile create/delete hooks (Phase 4); they live under
-# /run/service/ (tmpfs) and are reconciled on container restart by
+# Static services declared at build time: main-hermes, dashboard and
+# profile-gateways. Per-profile gateway services are registered
+# dynamically at runtime by the profile create/delete hooks (Phase 4);
+# they live under /run/hermes-service/ (tmpfs), supervised by the
+# hermes-owned s6-svscan of the profile-gateways service, never in the
+# root /run/service scandir, and are reconciled on container restart by
 # /etc/cont-init.d/02-reconcile-profiles (Phase 4 Task 4.0).
 COPY docker/s6-rc.d/ /etc/s6-overlay/s6-rc.d/
 
@@ -497,22 +499,15 @@ COPY docker/s6-rc.d/ /etc/s6-overlay/s6-rc.d/
 #
 # 02-reconcile-profiles re-creates per-profile gateway s6 service
 # slots from $HERMES_HOME/profiles/<name>/ after a container restart
-# (the /run/service/ scandir is tmpfs and wiped on restart). Phase 4.
+# (the /run/hermes-service/ scandir is tmpfs and wiped on restart). Phase 4.
 RUN mkdir -p /etc/cont-init.d && \
     printf '#!/command/with-contenv sh\nexec /opt/hermes/docker/stage2-hook.sh\n' \
         > /etc/cont-init.d/01-hermes-setup && \
     chmod +x /etc/cont-init.d/01-hermes-setup
 COPY --chmod=0755 docker/cont-init.d/015-supervise-perms /etc/cont-init.d/015-supervise-perms
 COPY --chmod=0755 docker/cont-init.d/02-reconcile-profiles /etc/cont-init.d/02-reconcile-profiles
-# Dynamic gateway services live outside s6-rc's legacy service bundle. Stop
-# them explicitly during stage 3 so their teardown can complete before s6's
-# global shutdown deadline kills the container.
-COPY --chmod=0755 docker/cont-finish.d/50-stop-gateways /etc/cont-finish.d/50-stop-gateways
-
-# Allow the finish hook to wait for the supervised gateways to exit. The
-# hook exits early for idle gateways, so this is a maximum rather than a fixed
-# delay on normal container stops.
-ENV S6_KILL_FINISH_MAXTIME=255000
+# gateway-drain stops dynamic gateways before profile-gateways ends its
+# supervision tree; its timeout bounds the existing graceful drain.
 
 # ---------- Runtime ----------
 ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist

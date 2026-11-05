@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-HOOK = ROOT / "docker" / "cont-finish.d" / "50-stop-gateways"
+HOOK = ROOT / "docker" / "stop-gateways.sh"
 
 
 def _write_executable(path: Path, content: str) -> Path:
@@ -22,7 +22,7 @@ def test_shutdown_hook_exits_without_gateway_slots(tmp_path: Path) -> None:
     service_root.mkdir()
 
     result = subprocess.run(
-        ["sh", str(HOOK)],
+        ["bash", str(HOOK)],
         env={**os.environ, "GATEWAY_SERVICE_ROOT": str(service_root)},
         capture_output=True,
         text=True,
@@ -63,7 +63,7 @@ def test_stale_slot_does_not_cancel_healthy_slot_wait(tmp_path: Path) -> None:
     )
 
     result = subprocess.run(
-        ["sh", str(HOOK)],
+        ["bash", str(HOOK)],
         env={
             **os.environ,
             "CALL_LOG": str(log),

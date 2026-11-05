@@ -20,10 +20,23 @@ revert an adopted commit blindly: that can undo the upstream implementation too.
 | Remote file sync | External Compresr's Hermes cache calls `sync(force=True, raise_on_error=True)` to surface transport failures. Keep while upstream lacks this contract; an in-tree caller search alone misses this installed consumer. | `tests/tools/test_file_sync.py`, installed `compresr/integrations/hermes/cache.py` |
 | Local Docker runtime | Preserve image revision stamps with canonical release versions, runtime UID/GID, root-safe operator shims and graceful shutdown of every gateway slot. `build.sh` passes `HERMES_BASE_VERSION` from the source's canonical Git version; never use pyproject's `0.0.0` placeholder, which falsely rejects compatible plugins. Retain local build choices: Kazakhstan Debian mirror, Firecrawl/Exa/Edge TTS extras, recursive bytecode/runtime exclusions, opt-in dashboard and test-container volume cleanup. Sealed stores and their snapshot exclusions now use upstream code/layout. | `tests/docker/`, `tests/scripts/test_docker_shutdown_wiring.py` |
 | External Compresr | Install the external package reproducibly and retain the absolute compression threshold plus Hermes YAML config loading in both the image and PM environments. Review/remove the guarded package patch when a newer Compresr supplies both behaviors. | `docker/patch_compresr_threshold.py --verify`, isolated image smoke |
-| Chromium / Playwright and browser sandbox | Retain the emergency 2026-11-03 update: managed Chrome for Testing 156.0.8078.80 (revision 1248), Google Meet's Python Playwright 1.64.1 pin/lock, verified browser artifacts on every platform, and Docker browser sandbox wiring (seccomp/user namespaces and no automatic Docker-wide `--no-sandbox`). Upstream checked on 2026-11-04 still pins Chromium 145.0.7632.6 and Playwright 1.64.0. Retire only when the selected upstream supplies the patched versions or newer and equivalent sandbox behavior; a version bump alone does not replace the whole local change. | `tests/pm/test_chromium.py`, `tests/plugins/test_google_meet_sandbox.py`, `tests/tools/test_terminal_browser_sandbox.py`, `tests/tools/test_docker_environment.py`, `tests/tools/test_bot_desktop_browser.py` |
+| Chromium / Playwright and browser sandbox | Retain the emergency 2026-11-03 update: managed Chrome for Testing 156.0.8078.80 (revision 1248), Google Meet's Python Playwright 1.64.1 pin/lock, verified browser artifacts on every platform, and Docker browser sandbox wiring (seccomp/user namespaces and no automatic Docker-wide `--no-sandbox`). Upstream checked on 2026-11-05 still pins Chromium 145.0.7632.6 and Playwright 1.64.0. Retire only when the selected upstream supplies the patched versions or newer and equivalent sandbox behavior; a version bump alone does not replace the whole local change. | `tests/pm/test_chromium.py`, `tests/plugins/test_google_meet_sandbox.py`, `tests/tools/test_terminal_browser_sandbox.py`, `tests/tools/test_docker_environment.py`, `tests/tools/test_bot_desktop_browser.py` |
 | Detached Telegram status | One editable structural status message per parent turn, surviving detached children. Source: [#90677](https://github.com/NousResearch/hermes-agent/pull/90677), cherry-picked with attribution and adapted for Telegram deferred edits/flood waits. Remove when upstream has equivalent lifecycle, routing and retry behavior. | `tests/gateway/test_subagent_activity_board.py` |
 
-## Latest full overlay audit — 2026-11-03
+## Latest full overlay audit — 2026-11-05
+
+Refreshed against upstream `c55af2c93b` (541 commits since the previous base).
+Compared every retained source delta; none of the listed behaviors has a complete
+upstream replacement. Accepted upstream dependency updates alongside the local
+Playwright pin. Kept upstream's bot-peer notice suppression on the local activity
+board as well as its standard progress lanes.
+
+Replaced the obsolete late container-finish hook with a dependency-ordered s6-rc
+drain: upstream moved profile gateways to the unprivileged `/run/hermes-service`
+supervision tree. Stop and wait for its gateway slots before that tree shuts down;
+keep the existing bounded parallel waits and persisted desired state.
+
+## Previous full overlay audit — 2026-11-03
 
 Refreshed against upstream `c314285f07`. Retired our live-owner completion recovery
 implementation and its early-replay assertion: upstream `6a065c1a58` adopted the fix,

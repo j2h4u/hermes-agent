@@ -38,13 +38,13 @@ p.write_text('ready\\\\n')
 while True:
     signal.pause()
 """)
-run = pathlib.Path('/run/service/gateway-default/run')
+run = pathlib.Path('/run/hermes-service/gateway-default/run')
 run.write_text('#!/bin/sh\\nexec /opt/hermes/.venv/bin/python /opt/data/shutdown-probe.py\\n')
 run.chmod(0o755)
 '''
         docker_exec(container_name, "python", "-c", setup).check_returncode()
         docker_exec(
-            container_name, "/command/s6-svc", "-u", "/run/service/gateway-default",
+            container_name, "/command/s6-svc", "-u", "/run/hermes-service/gateway-default",
         ).check_returncode()
         ready, _ = poll_container(
             container_name, "test \"$(cat /opt/data/shutdown-receipt)\" = ready",
