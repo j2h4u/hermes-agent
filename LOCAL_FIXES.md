@@ -24,7 +24,20 @@ revert an adopted commit blindly: that can undo the upstream implementation too.
 | Chromium / Playwright and browser sandbox | Retain the emergency 2026-11-03 update: managed Chrome for Testing 156.0.8078.80 (revision 1248), Google Meet's Python Playwright 1.64.1 pin/lock, verified browser artifacts on every platform, and Docker browser sandbox wiring (seccomp/user namespaces and no automatic Docker-wide `--no-sandbox`). Upstream checked on 2026-11-05 still pins Chromium 145.0.7632.6 and Playwright 1.64.0. Retire only when the selected upstream supplies the patched versions or newer and equivalent sandbox behavior; a version bump alone does not replace the whole local change. | `tests/pm/test_chromium.py`, `tests/plugins/test_google_meet_sandbox.py`, `tests/tools/test_terminal_browser_sandbox.py`, `tests/tools/test_docker_environment.py`, `tests/tools/test_bot_desktop_browser.py` |
 | Detached Telegram status | One editable structural status message per parent turn, surviving detached children. Source: [#90677](https://github.com/NousResearch/hermes-agent/pull/90677), cherry-picked with attribution and adapted for Telegram deferred edits/flood waits. Remove when upstream has equivalent lifecycle, routing and retry behavior. | `tests/gateway/test_subagent_activity_board.py` |
 
-## Latest full overlay audit — 2026-11-05
+## Latest full overlay audit — 2026-11-06
+
+Refreshed against upstream `90d6b98fd8` (584 commits since the previous base).
+Audited the complete retained source delta; no listed implementation has a full
+upstream replacement. Kept upstream's pnpm build migration and new undo/rollback
+contract fields alongside the local Docker behavior, browser pins and delegation
+heartbeat fields. Python, Node and uv pins remain unchanged; pnpm is now 12.15.0.
+Compresr 2.9.2 and Python Playwright 1.64.1 remain their latest published releases.
+
+Basic Memory is an unused standby integration, not an active maintenance blocker.
+Leave it available at the current version; its new tools/search architecture needs a
+separate migration before it replaces the Russian-search overlay. Do not disable it.
+
+## Previous full overlay audit — 2026-11-05
 
 Refreshed against upstream `c55af2c93b` (541 commits since the previous base).
 Compared every retained source delta; none of the listed behaviors has a complete
