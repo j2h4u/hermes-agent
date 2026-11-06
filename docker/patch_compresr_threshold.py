@@ -13,7 +13,7 @@ import io
 import os
 import sys
 import zipfile
-from importlib.metadata import distribution
+from importlib.metadata import Distribution, distribution
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -43,23 +43,32 @@ def patch_config_source(source: str) -> str:
     return source.replace(old, "        import hermes_yaml as yaml\n", 1)
 
 
-def write_patched_wheel(package) -> None:
+def _wheel_entry(name: str) -> zipfile.ZipInfo:
+    entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+    entry.create_system = 3
+    entry.external_attr = 0o100644 << 16
+    entry.compress_type = zipfile.ZIP_DEFLATED
+    return entry
+
+
+def write_patched_wheel(package: Distribution) -> None:
     """Let PM install the same patched artifact into its dependency generations."""
-    output = Path(__file__).with_name(f"compresr-{TARGET_VERSION}-py3-none-any.whl")
+    output = Path(__file__).parent / "compresr-patched" / f"compresr-{TARGET_VERSION}-py3-none-any.whl"
+    output.parent.mkdir(parents=True, exist_ok=True)
     record_path = f"compresr-{TARGET_VERSION}.dist-info/RECORD"
     rows = []
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as wheel:
-        for entry in package.files or ():
+        for entry in sorted(package.files or (), key=str):
             name = str(entry)
             if ".." in entry.parts or name.endswith((".pyc", "/RECORD", "/INSTALLER", "/REQUESTED")):
                 continue
             data = Path(package.locate_file(entry)).read_bytes()
             digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
             rows.append((name, f"sha256={digest}", str(len(data))))
-            wheel.writestr(name, data)
+            wheel.writestr(_wheel_entry(name), data)
         record = io.StringIO(newline="")
         csv.writer(record).writerows([*rows, (record_path, "", "")])
-        wheel.writestr(record_path, record.getvalue())
+        wheel.writestr(_wheel_entry(record_path), record.getvalue())
     print(f"Built patched wheel: {output.name}")
 
 

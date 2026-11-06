@@ -8,4 +8,4 @@ dependencies = ["compresr==2.9.2"]
 package = false
 
 [tool.uv.sources]
-compresr = { path = "/opt/hermes/docker/compresr-2.9.2-py3-none-any.whl" }
+compresr = { path = "/opt/hermes/docker/compresr-patched/compresr-2.9.2-py3-none-any.whl" }
