@@ -75,6 +75,36 @@ The activity-board PR was closed without merging; its implementation remains nec
 
 ## Update and deployment
 
+### Update the complete Hermes installation
+
+Every operator-triggered upstream refresh includes updating the separately installed
+third-party components, not just rebuilding Hermes. This is part of the same maintenance
+session, not an unattended updater. Discover the current enabled plugins, installed-skill
+sources, package pins and MCP endpoints each time; the table below is a starting map,
+not a closed list. Use the existing install metadata and lockfiles, not a new registry.
+
+| Component | Update path |
+| --- | --- |
+| Compresr | Check the package release, update the image and PM wheel pins together, and reassess both retained package patches before rebuilding. A rebuild alone reinstalls the pinned version. |
+| Muse | Refresh upstream in the separate `j2h4u/hermes-muse` fork, audit its `LOCAL_FIXES.md`, and install the resulting pinned revision through Hermes plugin management. Its persistent installation is not updated by rebuilding Hermes. |
+| Advanced delegation | Refresh the installed official plugin from `NousResearch/hermes-official-plugins` through plugin management; retain role routes, model assignments and reasoning settings. |
+| Honcho | Refresh its separately installed Hermes integration and managed SDK dependencies. The hosted Honcho service itself is provider-managed. Preserve the existing workspace and memory configuration. |
+| Ponytail and other external plugins | Resolve their actual installation source and update through the supported installer. Missing provenance is a maintenance blocker to resolve, not permission to overwrite with a guessed source. |
+| Third-party skills | Inspect the existing Skills Hub lockfile and other recorded sources; update installed external skills while preserving deliberate local changes. Bundled skills follow Hermes upstream; our own skills have no external version to fetch. |
+| Browser and managed runtimes | Check Chromium, Playwright, Python, Node and uv plus optional integration dependencies against their supported release tracks. Use Hermes PM and the image build, preserve compatible lockfiles, and audit the retained browser changes. Do not bypass package management with ad-hoc live installs. |
+| Connected MCP services | Include enabled ONAY, Basic Memory, Ozon, Strava and Telegram services, plus any later additions, in the maintenance review. Update available releases through each service's own repository and deployment procedure; never assume a Hermes rebuild updates them. Respect each service's active-work and deployment constraints. |
+
+Audit our fixes and features against each selected upstream revision before retaining
+them. Upgrade available compatible releases; report an actual incompatibility or deployment
+hold explicitly instead of silently skipping the component. Preserve disabled integrations
+as disabled. Verify the changed components with targeted checks and real integration
+smokes, including Muse job readiness and MCP registration, without rerunning upstream's
+full test suites. Finish with a concise account of what changed, what was already current,
+and any component that remains blocked. Keep plugin auto-apply disabled; do not add a
+timer, version registry, routine backup or rollback archive for this workflow.
+
+### Source integration and deployment
+
 `main` follows `upstream/main`; `overlay/local-fixes` holds the local integration;
 `deploy` tracks `origin/deploy`. Fetch remotes separately:
 
