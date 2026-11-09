@@ -644,7 +644,7 @@ def test_display_setting_defaults_on_and_can_be_switched_off_per_platform():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("deferred", ["skipped", "flood"])
+@pytest.mark.parametrize("deferred", ["skipped", "flood", "flood_text"])
 async def test_deferred_telegram_edit_does_not_consume_terminal_status(scheduled, deferred):
     from gateway.platforms.base import SendResult
 
@@ -654,6 +654,8 @@ async def test_deferred_telegram_edit_does_not_consume_terminal_status(scheduled
         async def edit_message(self, chat_id, message_id, content, **kwargs):
             if self.skip_next:
                 self.skip_next = False
+                if deferred == 'flood_text':
+                    return SendResult(success=False, error='Flood control exceeded. Retry in 185 seconds')
                 if deferred == 'flood':
                     from plugins.platforms.telegram.adapter import _flood_cap_result
                     return _flood_cap_result(7.5)
@@ -670,3 +672,5 @@ async def test_deferred_telegram_edit_does_not_consume_terminal_status(scheduled
     assert len(adapter.sent) == 1
     assert len(adapter.edits) == 1
     assert '1/1 done' in adapter.texts[-1]
+    if deferred == 'flood_text':
+        assert 185 in fake.slept

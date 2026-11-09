@@ -109,6 +109,19 @@ class TestBuildChannelDirectoryWrites:
             {"id": "family_1", "name": "达拉崩吧", "type": "group"},
         ]
 
+    def test_telegram_uses_adapter_configured_channels_before_session_history(self, monkeypatch):
+        from gateway.channel_directory import _build_telegram
+
+        monkeypatch.setattr("gateway.channel_directory._load_configured_telegram_dm_topics", lambda: [])
+        monkeypatch.setattr("gateway.channel_directory._build_from_sessions", lambda _platform: [
+            {"id": "42:7", "name": "stale", "type": "dm"},
+        ])
+        adapter = SimpleNamespace(configured_channels=lambda: [
+            {"id": "42:7", "name": "Reports", "type": "dm", "thread_id": "7"},
+        ], _dm_topics={})
+
+        assert _build_telegram(adapter)[0]["name"] == "Reports"
+
     def test_telegram_dm_topics_are_available_as_send_targets(self, tmp_path, monkeypatch):
         adapter = SimpleNamespace(_dm_topics_config=[], _dm_topics={})
         monkeypatch.setattr(

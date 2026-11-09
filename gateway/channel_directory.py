@@ -168,6 +168,7 @@ async def build_channel_directory(adapters: dict[Any, Any]) -> dict[str, Any]:
         from gateway.platform_registry import platform_registry
         for entry in platform_registry.loaded_entries():
             await _discover(entry.name)
+    _merge_configured_channels(adapters, platforms)
     _apply_channel_aliases(platforms)
     directory = {"updated_at": datetime.now().isoformat(), "platforms": platforms}
     try:
@@ -175,6 +176,42 @@ async def build_channel_directory(adapters: dict[Any, Any]) -> dict[str, Any]:
     except Exception as e:
         logger.warning("Channel directory: failed to write: %s", e)
     return directory
+
+
+def _merge_configured_channels(adapters: dict[Any, Any], platforms: dict[str, list[dict[str, Any]]]) -> None:
+    """Add the targets an adapter's own config declares (``configured_channels()``, e.g. Telegram
+    ``extra.dm_topics``) after discovery: session history alone drops them once their sessions are
+    pruned (#52629). Discovered entries win on an id collision; label clashes are id-qualified."""
+    for platform, adapter in adapters.items():
+        configured = getattr(adapter, "configured_channels", None)
+        if not callable(configured):
+            continue
+        try:
+            entries = _normalize_adapter_channels(configured())
+        except Exception as e:
+            logger.warning("Channel directory: configured channels for %s failed: %s", platform.value, e, exc_info=True)
+            continue
+        known = platforms.setdefault(platform.value, [])
+        seen = {entry.get("id") for entry in known}
+        added = [entry for entry in entries if entry["id"] not in seen]
+        known.extend(added)
+        _qualify_label_clashes(platform.value, known, {id(entry) for entry in added})
+
+
+def _qualify_label_clashes(platform_name: str, entries: list[dict[str, Any]], added: set[int]) -> None:
+    """Prefix the id onto every entry whose label resolves (``resolve_channel_name`` step 1) like a
+    different target's, when one of them is a just-merged configured entry: the bare name then
+    resolves to nothing rather than to whichever chat was listed first. Discovered-only clashes keep
+    their labels."""
+    by_key: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        labels = {_normalize_channel_query(entry["name"]), _normalize_channel_query(_channel_target_name(platform_name, entry))}
+        for key in labels:
+            by_key.setdefault(key, []).append(entry)
+    clashing = {id(e): e for group in by_key.values()
+                if len({e["id"] for e in group}) > 1 and any(id(e) in added for e in group) for e in group}
+    for entry in clashing.values():
+        entry["name"] = f"{entry['id']} / {entry['name']}"
 
 
 def _build_discord(adapter) -> list[dict[str, str]]:
@@ -236,16 +273,28 @@ def _build_telegram(adapter) -> list[dict[str, Any]]:
     channels: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     _add_telegram_dm_topics(channels, seen_ids, _load_configured_telegram_dm_topics())
-    _add_telegram_dm_topics(channels, seen_ids, getattr(adapter, "_dm_topics_config", None))
+    configured = getattr(adapter, "configured_channels", None)
+    if callable(configured):
+        try:
+            entries = _normalize_adapter_channels(configured())
+        except Exception:
+            logger.warning("Channel directory: configured Telegram channels failed", exc_info=True)
+            entries = []
+        for channel in entries:
+            if channel["id"] not in seen_ids:
+                channels.append(channel)
+                seen_ids.add(channel["id"])
     for cache_key, thread_id in (getattr(adapter, "_dm_topics", None) or {}).items():
         if thread_id and ":" in cache_key:
             chat_id, topic_name = cache_key.split(":", 1)
             _add_telegram_dm_topics(channels, seen_ids, [{"chat_id": chat_id,
                 "topics": [{"name": topic_name, "thread_id": thread_id}]}])
+    configured_entries = {id(channel) for channel in channels}
     for channel in _build_from_sessions("telegram"):
         if channel["id"] not in seen_ids:
             channels.append(channel)
             seen_ids.add(channel["id"])
+    _qualify_label_clashes("telegram", channels, configured_entries)
     return channels
 
 

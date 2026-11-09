@@ -34,6 +34,7 @@ import time
 from typing import Any, Callable, Optional
 
 from gateway.config import Platform
+from gateway.delivery_ledger import flood_wait_seconds, is_flood_error
 from gateway.platforms.base import BasePlatformAdapter, SendResult
 
 logger = logging.getLogger(__name__)
@@ -246,7 +247,9 @@ class SubagentActivityBoard:
                     # A send exception or an explicit permanent/ambiguous failure may have posted
                     # without returning an id. Never risk a duplicate. Edits are idempotent, so an
                     # exception while editing the owned message remains safe to retry.
-                    retryable = (editing and result is None) or bool(
+                    error = getattr(result, "error", "") or ""
+                    flood = is_flood_error(error) or "flood" in error.lower() or "retry after" in error.lower()
+                    retryable = flood or (editing and result is None) or bool(
                         getattr(result, "retryable", False)
                     ) or bool(getattr(result, "retry_after", None))
                     if not retryable:
@@ -261,7 +264,7 @@ class SubagentActivityBoard:
                     # are common during Telegram flood waits, so use bounded progressive backoff.
                     retry_delay = max(
                         self._min_edit_interval * misses,
-                        getattr(result, "retry_after", None) or 0.0,
+                        getattr(result, "retry_after", None) or (flood_wait_seconds(error) if flood else 0.0),
                     )
                     await self._sleep(min(_MAX_RETRY_DELAY, retry_delay))
                     with self._lock:
