@@ -3,7 +3,7 @@
 import sqlite3
 
 import hermes_startup_watchdog as watchdog
-import hermes_cli.backup as backup
+from hermes_cli import backup
 from hermes_cli.backup import verify_sqlite_integrity
 
 
