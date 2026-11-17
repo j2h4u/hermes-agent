@@ -1077,9 +1077,7 @@ class TestRunJobConfigEnvVarExpansion:
         Regression for Daily Focus Kickoff 2026-08-11: xai-oauth token refresh
         raised httpx.ConnectError ([Errno 8] nodename nor servname provided)
         and the scheduler only tried fallbacks on AuthError, so the job died
-        before XAI_API_KEY / Anthropic could rescue it. The job follows the
-        main model (unpinned): a pinned job never walks the global chain
-        (#100437, tests/cron/test_cron_pinned_job_fallback.py).
+        before XAI_API_KEY / Anthropic could rescue it.
         """
         import httpx
 

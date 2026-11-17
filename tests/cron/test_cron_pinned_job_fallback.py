@@ -1,17 +1,4 @@
-"""A cron job with its own provider/model/base_url pin never walks the global fallback chain (#100437).
-
-Two vectors, one rule (``cron.scheduler._job_fallback_chain``, shared with delegate_task's pinned
-children via ``hermes_cli.fallback_config.scoped_fallback_chain``):
-
-- credential resolution: an AuthError / DNS blip on the pinned primary must not resolve a
-  ``fallback_providers`` entry instead;
-- mid-run: the chain handed to ``AIAgent(fallback_model=...)`` is what the conversation loop's
-  provider ladder walks on a 5xx/429, so a pinned job must get none.
-
-Unpinned jobs (which store no provider/model since jobs follow the main model) keep inheriting
-the chain at both points. Drives the real ``run_job`` with AIAgent and
-``resolve_runtime_provider`` mocked.
-"""
+"""Pinned cron routes are primary and may use the configured global fallback chain."""
 
 import asyncio
 import json
@@ -122,36 +109,44 @@ PINS = [
 
 
 @pytest.mark.parametrize("pin", PINS)
-def test_pinned_job_primary_auth_failure_does_not_land_on_the_global_chain(tmp_path, pin):
+def test_pinned_job_primary_auth_failure_walks_global_chain(tmp_path, pin):
     success, error, requested, agent_kwargs = _run(
         tmp_path, _job(**pin), primary_error=AuthError("No credentials stored"))
-    assert success is False
-    assert "No credentials stored" in (error or "")
-    assert "openrouter" not in requested
-    assert agent_kwargs == {}  # the job failed; nothing ran on a substituted route
+    assert (success, error) == (True, None)
+    assert requested == [pin.get("provider"), "openrouter"]
+    assert (agent_kwargs["provider"], agent_kwargs["model"]) == ("openrouter", "z-ai/glm-5.2")
 
 
-def test_pinned_job_dns_blip_does_not_land_on_the_global_chain(tmp_path):
+def test_pinned_job_dns_failure_walks_global_chain(tmp_path):
     import httpx
 
-    success, _error, requested, agent_kwargs = _run(
+    success, error, requested, agent_kwargs = _run(
         tmp_path, _job(provider="xai-oauth", model="grok-4.5"),
         primary_error=httpx.ConnectError("[Errno 8] nodename nor servname provided, or not known"))
-    assert success is False
-    assert set(requested) == {"xai-oauth"}  # preflight probe + real resolve; no chain entry
-    assert agent_kwargs == {}
+    assert (success, error) == (True, None)
+    assert requested == ["xai-oauth", "openrouter"]
+    assert agent_kwargs["provider"] == "openrouter"
 
 
-@pytest.mark.parametrize("pin", PINS)
-def test_resolve_job_runtime_does_not_walk_the_chain_for_a_pinned_job(pin):
-    """The resolver itself, below preflight (which can be off: ``cron.preflight: false``)."""
-    jc = _CronJobConfig(cfg={"fallback_providers": list(_CHAIN)}, model=pin.get("model") or "gpt-5.6-sol",
+
+def test_endpoint_pin_is_not_forwarded_to_fallback():
+    jc = _CronJobConfig(cfg={"fallback_providers": list(_CHAIN)}, model="local",
                         model_cfg={}, cron_default_provider="")
-    resolve = MagicMock(side_effect=AuthError("No credentials stored"))
-    with patch("hermes_cli.runtime_provider.resolve_runtime_provider", resolve):
-        with pytest.raises(RuntimeError, match="No credentials stored"):
-            _resolve_job_runtime(_job(**pin), "pin-job", jc)
-    assert resolve.call_count == 1
+    calls = []
+
+    def resolve(**kwargs):
+        calls.append(kwargs)
+        if kwargs.get("requested") == "custom":
+            raise AuthError("No credentials stored")
+        return _runtime("openrouter")
+
+    with patch("hermes_cli.runtime_provider.resolve_runtime_provider", side_effect=resolve):
+        runtime, model = _resolve_job_runtime(
+            _job(provider="custom", base_url="http://127.0.0.1:8080/v1", model="local"), "pin-job", jc)
+    assert (runtime["provider"], model) == ("openrouter", "z-ai/glm-5.2")
+    assert calls[0]["explicit_base_url"] == "http://127.0.0.1:8080/v1"
+    assert "explicit_base_url" not in calls[1]
+    assert "api_key" not in calls[1]
 
 
 def test_resolve_job_runtime_walks_the_chain_for_an_unpinned_job():
@@ -169,10 +164,10 @@ def test_resolve_job_runtime_walks_the_chain_for_an_unpinned_job():
 
 
 @pytest.mark.parametrize("pin", PINS)
-def test_pinned_job_agent_gets_no_runtime_fallback_ladder(tmp_path, pin):
+def test_pinned_job_agent_inherits_runtime_fallback_ladder(tmp_path, pin):
     success, error, _requested, agent_kwargs = _run(tmp_path, _job(**pin))
     assert (success, error) == (True, None)
-    assert agent_kwargs["fallback_model"] is None
+    assert agent_kwargs["fallback_model"] == _CHAIN
 
 
 def test_unpinned_job_still_walks_the_global_chain_at_resolve_time(tmp_path):
@@ -208,12 +203,11 @@ def test_pinned_job_same_provider_credential_pool_still_loads(tmp_path):
     assert (success, error) == (True, None)
     load_pool.assert_called_once_with("anthropic")
     assert agent_kwargs["credential_pool"] is pool
-    assert agent_kwargs["fallback_model"] is None
+    assert agent_kwargs["fallback_model"] == _CHAIN
 
 
-def test_pinned_job_failure_notice_does_not_promise_a_backup(monkeypatch):
+def test_pinned_job_failure_notice_reports_backup_failure(monkeypatch):
     monkeypatch.setattr(scheduler, "load_config", lambda: {"fallback_providers": list(_CHAIN)})
     phrase = scheduler._fallback_chain_phrase(_job(provider="anthropic", model="claude-sonnet-5"))
-    assert "pinned" in phrase and "--unpin" in phrase
-    assert "succeeded" not in phrase
+    assert phrase == "No backup provider succeeded either."
     assert scheduler._fallback_chain_phrase(_job()) == "No backup provider succeeded either."

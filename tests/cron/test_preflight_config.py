@@ -178,7 +178,6 @@ class TestMissingProviderKeyBlocks:
                 raise AuthError("no key")
             return {**_RUNTIME, "provider": "openrouter"}
 
-        # Unpinned: a job carrying its own model is pinned (#100437) and gets no chain.
         job = _job(model=None)
         with cron_jobs.use_cron_store(tmp_path):
             cron_jobs.save_jobs([job])
@@ -189,9 +188,8 @@ class TestMissingProviderKeyBlocks:
         assert success is True
         assert error is None
 
-    def test_global_chain_does_not_rescue_a_pinned_job(self, tmp_path):
-        """A pinned job never walks the global chain (#100437), so the chain must not skip the
-        missing-key check for it either: block before the agent is built."""
+    def test_global_chain_rescues_a_pinned_job(self, tmp_path):
+        """A pinned primary can recover through the global chain after a missing key."""
         (tmp_path / "config.yaml").write_text(
             "fallback_providers:\n"
             "  - provider: openrouter\n"
@@ -214,10 +212,10 @@ class TestMissingProviderKeyBlocks:
             success, _output, _final_response, error, agent_constructed = \
                 _run_job_patched(job, tmp_path, resolve=resolve)
 
-        assert agent_constructed is False
-        assert success is False
-        assert "provider credential missing" in (error or "")
-        assert "openrouter" not in calls
+        assert agent_constructed is True
+        assert success is True
+        assert error is None
+        assert calls == ["anthropic", "openrouter"]
 
 
 class TestHealthyJobUnaffected:

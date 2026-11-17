@@ -92,8 +92,7 @@ def cron_default_provider(cfg: dict) -> str:
 def _preflight_check_provider_key(job: dict, cfg: dict) -> Optional[str]:
     """READ-ONLY probe: would provider resolution fail for lack of a key? Mirrors run_job's
     requested-provider computation. Skipped when the job has a fallback chain — auth-fallback may
-    legitimately rescue a missing primary key. A pinned job has none (``_job_fallback_chain``), so
-    its missing key blocks even when the global chain is configured."""
+    legitimately rescue a missing primary key."""
     try:
         if _sched._job_fallback_chain(job, cfg):
             return None
