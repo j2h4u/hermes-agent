@@ -46,14 +46,16 @@ def test_chromium_binary_and_env_survive_store_relocation(tmp_path, target, rela
 def test_locked_chromium_is_patched_chrome_for_testing():
     """The downloader and the lock agree, every target uses the
     Chrome-for-Testing build (linux-arm64 included), and that build is at
-    least 156.0.8078.73."""
+    least 157.0.8103.38."""
     package = Chromium()
     lock = Lockfile(lockfile_path())
     version = lock.version(package.name)
     assert version is not None
     chrome = tuple(int(part) for part in version.partition("+")[2].split("."))
-    assert chrome >= (156, 0, 8078, 73)
+    assert chrome >= (157, 0, 8103, 38)
     for target in ("linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64", "win32-x64", "win32-arm64"):
-        url = lock.artifacts(package.name, target)[0]["url"]
+        artifact = lock.artifacts(package.name, target)[0]
+        url = artifact["url"]
         assert url == package.fetch_url(version, target)
-        assert "/builds/cft/" in url
+        assert url.startswith("https://storage.googleapis.com/chrome-for-testing-public/")
+        assert len(artifact["sha256"]) == 64 and all(c in "0123456789abcdef" for c in artifact["sha256"])

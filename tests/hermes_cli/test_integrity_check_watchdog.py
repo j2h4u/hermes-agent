@@ -3,6 +3,7 @@
 import sqlite3
 
 import hermes_startup_watchdog as watchdog
+import hermes_cli.backup as backup
 from hermes_cli.backup import verify_sqlite_integrity
 
 
@@ -32,7 +33,7 @@ def test_slow_integrity_check_renews_bounded_startup_lease(tmp_path, monkeypatch
         report(seconds, phase=phase)
 
     monkeypatch.setattr(watchdog, "report_startup_progress", slow_progress)
-    connect = sqlite3.connect
+    connect = backup.connect_tracked
 
     class SlowConnection(sqlite3.Connection):
         def execute(self, sql, *args, **kwargs):
@@ -43,7 +44,7 @@ def test_slow_integrity_check_renews_bounded_startup_lease(tmp_path, monkeypatch
             return super().execute(sql, *args, **kwargs)
 
     monkeypatch.setattr(
-        sqlite3, "connect", lambda *args, **kwargs: connect(*args, factory=SlowConnection, **kwargs)
+        backup, "connect_tracked", lambda *args, **kwargs: connect(*args, factory=SlowConnection, **kwargs)
     )
     assert verify_sqlite_integrity(path)["valid"]
     assert handle._lease_count > 1
