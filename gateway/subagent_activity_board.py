@@ -126,8 +126,10 @@ class SubagentActivityBoard:
     def __init__(
         self, adapter: Any, chat_id: str, metadata: Optional[dict], *,
         min_edit_interval: float = _MIN_EDIT_INTERVAL, clock=time.monotonic, sleep=asyncio.sleep,
+        resolve_adapter: Optional[Callable[[], Any]] = None,
     ) -> None:
         self._adapter = adapter
+        self._resolve_adapter = resolve_adapter
         self._chat_id = str(chat_id)
         self._metadata = dict(metadata or {})
         # Status is an interim gateway send. Relay adapters use this marker to avoid
@@ -295,12 +297,13 @@ class SubagentActivityBoard:
             return True  # an invisible change (e.g. inside the collapsed tail) owes no edit
         try:
             initial_send = self._message_id is None
+            adapter = self._resolve_adapter() if self._resolve_adapter else self._adapter
             if initial_send:
-                result = await self._adapter.send(self._chat_id, text, metadata=self._metadata)
+                result = await adapter.send(self._chat_id, text, metadata=self._metadata)
                 if getattr(result, "success", False) and getattr(result, "message_id", None):
                     self._message_id = str(result.message_id)
             else:
-                result = await self._adapter.edit_message(
+                result = await adapter.edit_message(
                     self._chat_id, self._message_id, text, metadata=self._metadata,
                 )
         except Exception:
@@ -395,6 +398,7 @@ def observe_subagent_activity(
                 if board is None:
                     board = ctx._subagent_activity_board = SubagentActivityBoard(
                         adapter, ctx._status_chat_id, ctx._status_thread_metadata,
+                        resolve_adapter=lambda: ctx._status_adapter,
                     )
         if board.observe(event_type, payload):
             future = schedule(_publish_board(board, runner), "subagent activity board scheduling error")

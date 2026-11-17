@@ -25,7 +25,33 @@ revert an adopted commit blindly: that can undo the upstream implementation too.
 | Native plugin manifest priority | Install native YAML plugins even when their repository also contains another harness's `plugin.json`. Adopted [#125937](https://github.com/NousResearch/hermes-agent/pull/125937) with attribution, keeping current app-availability diagnostics. Retire when selected upstream consistently uses its shared native/portable predicate at the install gate. | `tests/hermes_cli/test_plugins_cmd.py::test_install_gate_skips_foreign_plugin_json_when_native_manifest_present`, real Ponytail install |
 | Detached Telegram status | One editable structural status message per parent turn, surviving detached children. Source: [#90677](https://github.com/NousResearch/hermes-agent/pull/90677), cherry-picked with attribution and adapted for Telegram deferred edits/flood waits. Remove when upstream has equivalent lifecycle, routing and retry behavior. | `tests/gateway/test_subagent_activity_board.py` |
 
-## Latest full overlay audit — 2026-11-09
+## Latest full overlay audit — 2026-11-17
+
+Integrated upstream `3e9d42b876` (8,861 commits since the installed base).
+Compared every retained source difference, including features outside this inventory.
+Removed the local duplicate post-commit maintenance hook in favor of upstream's
+`maintain_after_commit`; retained transaction-aware transient SQLite retries.
+The upstream PDF-album implementation remains authoritative. Forward/reply/quote
+context, configured-topic naming through ConfigBackend, integrity progress leases,
+external FileSync and native plugin manifest priority still need their local delta.
+
+Adapted queued `/moa`, active steering and durable replay to upstream's new ingress
+paths. The detached status board now follows the turn's current Telegram adapter
+after reconnect, preserving the same owned message. Retained the browser sandbox
+and patched-version floor. Chromium is now 157.0.8103.78, Python
+3.14.10+20261110, Node 26.13.1 and uv 0.13.8, with verified PM target hashes.
+Independent Termux Python/Node pins are preserved. pnpm is optional at runtime
+while source-install and build paths still request it explicitly.
+
+Muse is updated separately to our 0.5.4 fork, preserving semantic Russian review,
+full-turn and cross-batch context, health wording, grouped launchers and the live
+concurrent-store-read correction. Honcho's catalog now supplies 1.2.0. Advanced
+delegation, Ponytail and Compresr package releases remain current. Automatic child
+resume is a new opt-in upstream feature; this update does not enable it or change
+our model routes and job settings. Runtime publication and health verification
+are tracked by this maintenance session, separately from the source merge.
+
+## Previous full overlay audit — 2026-11-09
 
 Integrated upstream `7f01683b5a` (1,709 commits since the previous base).
 Retired our attachment-flag padding implementation: upstream now preserves the

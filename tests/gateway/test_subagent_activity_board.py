@@ -117,7 +117,7 @@ def _turn(adapter, *, platform=Platform.TELEGRAM, runner=None, fake_time=None, t
     ctx = TurnContext(
         source=SessionSource(platform=platform, chat_id="chat"),
         _run_still_current=lambda: True,
-        _status_adapter=adapter,
+        _status_adapter_pinned=adapter,
         _status_chat_id="chat",
         _status_thread_metadata={"thread_id": str(thread_id)},
         _loop_for_step=asyncio.get_running_loop(),
@@ -258,11 +258,11 @@ async def test_no_bubble_without_edit_support_off_telegram_or_when_disabled(sche
 async def test_board_is_created_lazily_and_only_for_eligible_turns(scheduled):
     telegram = TurnContext(
         source=SessionSource(platform=Platform.TELEGRAM, chat_id="chat"), _run_still_current=lambda: True,
-        _status_adapter=_EditingAdapter(), _status_chat_id="chat", _loop_for_step=asyncio.get_running_loop(),
+        _status_adapter_pinned=_EditingAdapter(), _status_chat_id="chat", _loop_for_step=asyncio.get_running_loop(),
     )
     discord = TurnContext(
         source=SessionSource(platform=Platform.DISCORD, chat_id="chat"), _run_still_current=lambda: True,
-        _status_adapter=_EditingAdapter(), _status_chat_id="chat", _loop_for_step=asyncio.get_running_loop(),
+        _status_adapter_pinned=_EditingAdapter(), _status_chat_id="chat", _loop_for_step=asyncio.get_running_loop(),
     )
     assert telegram._subagent_activity_board is None and discord._subagent_activity_board is None
     TurnRunner(SimpleNamespace(), telegram).progress_callback("tool.started", "read_file")
@@ -274,6 +274,27 @@ async def test_board_is_created_lazily_and_only_for_eligible_turns(scheduled):
     assert isinstance(telegram._subagent_activity_board, SubagentActivityBoard)
     assert discord._subagent_activity_board is None
     assert len(telegram._status_adapter.sent) == 1 and discord._status_adapter.sent == []
+
+
+@pytest.mark.asyncio
+async def test_board_edits_through_reconnected_adapter(scheduled):
+    old, replacement = _EditingAdapter(), _EditingAdapter()
+    current = [old]
+    ctx = TurnContext(source=SessionSource(platform=Platform.TELEGRAM, chat_id="chat"),
+                      _status_chat_id="chat", _loop_for_step=asyncio.get_running_loop())
+    ctx.bind_status_adapter(lambda: current[0])
+    turn = TurnRunner(SimpleNamespace(), ctx)
+    turn.progress_callback("subagent.start", **_child(0))
+    await _drain(scheduled)
+    ctx._subagent_activity_board._min_edit_interval = 0
+    current[0] = replacement
+
+    turn.progress_callback("subagent.complete", status="completed", **_child(0))
+    await _drain(scheduled)
+
+    assert len(old.sent) == 1 and old.edits == []
+    assert len(replacement.edits) == 1
+    assert replacement.edits[0][0] == old.sent[0][0]
 
 
 @pytest.mark.asyncio
@@ -307,7 +328,7 @@ async def test_concurrent_first_events_create_exactly_one_board_and_bubble(monke
     adapter = _EditingAdapter()
     ctx = TurnContext(
         source=SessionSource(platform=Platform.TELEGRAM, chat_id="chat"),
-        _run_still_current=lambda: True, _status_adapter=adapter, _status_chat_id="chat",
+        _run_still_current=lambda: True, _status_adapter_pinned=adapter, _status_chat_id="chat",
         _loop_for_step=loop,
     )
     loop_thread = threading.get_ident()
@@ -345,7 +366,7 @@ async def test_concurrent_first_events_create_exactly_one_board_and_bubble(monke
     runner._running = False
     shutdown_ctx = TurnContext(
         source=SessionSource(platform=Platform.TELEGRAM, chat_id="chat"),
-        _run_still_current=lambda: True, _status_adapter=adapter, _status_chat_id="chat",
+        _run_still_current=lambda: True, _status_adapter_pinned=adapter, _status_chat_id="chat",
         _loop_for_step=loop,
     )
     before = len(scheduled_futures)

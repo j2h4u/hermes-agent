@@ -55,9 +55,11 @@ def source_install_packages(names: list[str]) -> list[str]:
     from pm.store import current_target
 
     target = current_target()
+    # Source frontends need pnpm; packaged runtimes can acquire it on demand.
     return [name for name in names
             if not get_package(name).internal
-            and (name == "python" or not get_package(name).optional)
+            and (name == "python" or (name == "pnpm" and target not in get_package(name).on_demand)
+                 or not get_package(name).is_optional(target))
             and get_package(name).missing_reason(target) is None]
 
 

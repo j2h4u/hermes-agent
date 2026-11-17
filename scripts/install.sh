@@ -268,40 +268,40 @@ run_logged() {
 # --- BEGIN GENERATED: bootstrap pins (scripts/gen-bootstrap-pins.py) ---
 # Derived from pm/lock.json. DO NOT EDIT BY HAND:
 # run scripts/gen-bootstrap-pins.py after a pin bump.
-UV_PIN_VERSION="0.13.7"
+UV_PIN_VERSION="0.13.8"
 
 # Sets UV_PIN_URL + UV_PIN_SHA256 for a <os>-<arch> target key.
 uv_bootstrap_pin() {
     case "$1" in
         linux-x64)
-            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-gnu.tar.gz"
-            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-            UV_PIN_SHA256="c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz"
+            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91"
+            UV_PIN_SHA256="5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91"
             ;;
         linux-arm64)
-            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.7/uv-aarch64-unknown-linux-gnu.tar.gz"
-            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc"
-            UV_PIN_SHA256="71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc"
+            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.8/uv-aarch64-unknown-linux-gnu.tar.gz"
+            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/74f2f5c6024d397481db228db8fc25eed420db192243f88438c118e7e013e585"
+            UV_PIN_SHA256="74f2f5c6024d397481db228db8fc25eed420db192243f88438c118e7e013e585"
             ;;
         linux-x64-musl)
-            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-musl.tar.gz"
-            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/287491da03f2a785c70fa75b13e1f849918c2f2b5415fe84876b8214eeb792f9"
-            UV_PIN_SHA256="287491da03f2a785c70fa75b13e1f849918c2f2b5415fe84876b8214eeb792f9"
+            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-musl.tar.gz"
+            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/61fb26dabc4f0cf1d050fc6c67d40e43e4fae2994af21ebc1e050b233bf2b5ed"
+            UV_PIN_SHA256="61fb26dabc4f0cf1d050fc6c67d40e43e4fae2994af21ebc1e050b233bf2b5ed"
             ;;
         linux-arm64-musl)
-            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.7/uv-aarch64-unknown-linux-musl.tar.gz"
-            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/2d3ec076a0c4c0e8250bb6418c44080828b544f1a3be0b6e46adf9fb6923de45"
-            UV_PIN_SHA256="2d3ec076a0c4c0e8250bb6418c44080828b544f1a3be0b6e46adf9fb6923de45"
+            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.8/uv-aarch64-unknown-linux-musl.tar.gz"
+            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/0c6f8593fcf1eadfc60e663b685c408267559d7c5d61c689bbb9f3a7e369ba32"
+            UV_PIN_SHA256="0c6f8593fcf1eadfc60e663b685c408267559d7c5d61c689bbb9f3a7e369ba32"
             ;;
         darwin-x64)
-            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-apple-darwin.tar.gz"
-            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/20c47e4c1f630b8abaff8c291fa9b9aa300fef92c4fbff95adf198b55287cda7"
-            UV_PIN_SHA256="20c47e4c1f630b8abaff8c291fa9b9aa300fef92c4fbff95adf198b55287cda7"
+            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-apple-darwin.tar.gz"
+            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/a04c2ffeac28b2003a2c13caf538ab425fcd7def3e4a41571f4a8fb370a66af3"
+            UV_PIN_SHA256="a04c2ffeac28b2003a2c13caf538ab425fcd7def3e4a41571f4a8fb370a66af3"
             ;;
         darwin-arm64)
-            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.7/uv-aarch64-apple-darwin.tar.gz"
-            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/81b811b57e4624df7ed3aac148e0359100d9962f3d9dce00aec533dc2e086731"
-            UV_PIN_SHA256="81b811b57e4624df7ed3aac148e0359100d9962f3d9dce00aec533dc2e086731"
+            UV_PIN_URL="https://github.com/astral-sh/uv/releases/download/0.13.8/uv-aarch64-apple-darwin.tar.gz"
+            UV_PIN_MIRROR="https://hermes-assets.nousresearch.com/upstream/sha256/6b71028a6b904f2ae3340ef52e595512de807d06c0a20eaef2f692581b246558"
+            UV_PIN_SHA256="6b71028a6b904f2ae3340ef52e595512de807d06c0a20eaef2f692581b246558"
             ;;
         *)
             UV_PIN_URL=""
@@ -407,7 +407,10 @@ ensure_uv() {
             rm -rf "$_tmp"
             fail "uv download digest mismatch from $_fetched_from (expected $UV_PIN_SHA256, got $_digest)" download_digest_mismatch
         fi
-        if ! tar -xzf "$_tmp/uv.tar.gz" -C "$_tmp"; then
+        # Release tarballs record the builder's uid (1001); as root, tar would
+        # restore it and hand the uv that root runs to that local account. -o,
+        # not --no-same-owner: busybox tar without long options takes only -o.
+        if ! tar -o -xzf "$_tmp/uv.tar.gz" -C "$_tmp"; then
             rm -rf "$_tmp"
             fail "failed to extract pinned uv archive" uv_unusable
         fi
@@ -535,6 +538,14 @@ emit_manifest() {
 }
 
 git_runs() { command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1; }
+
+# An exported GIT_DIR/GIT_WORK_TREE (a dotfiles alias, a git hook) retargets every
+# `git -C "$INSTALL_DIR"` at the user's other repo, and the rerun's stash/reset would act on
+# it (#146032). Stages run in a subshell (run_stage), so this stays local to the stage.
+drop_git_location_env() {
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+        GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE
+}
 
 # macOS ships /usr/bin/git as a stub until Apple's Command Line Tools are
 # installed: it is on PATH, but every call fails ("see man xcode-select").
@@ -709,13 +720,19 @@ stable_unreachable() {
 
 stage_repository() {
     local pinned=false channel="" release="" origin
+    drop_git_location_env
     # An interrupted clone from an older installer can leave a .git with no
     # initial commit, where stash/checkout abort ("You do not have the
     # initial commit yet", #40998); a killed update or a sync tool can leave
     # one git rejects outright (empty HEAD, a gitdir: file pointing nowhere),
     # where `hermes update` cannot fetch. Move it aside -- never delete it, it
     # may hold something the user wants -- and clone fresh below.
-    if [ -e "$INSTALL_DIR/.git" ] && ! git -C "$INSTALL_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
+    # A .git git cannot read makes it search the parent directories, and a
+    # git-managed $HOME would pass the probe and get the stash/reset below
+    # (#146032): the ceiling keeps the probe to INSTALL_DIR's own .git.
+    local ceiling
+    ceiling="$(CDPATH="" cd "$INSTALL_DIR" 2>/dev/null && pwd -P)" && ceiling="$(dirname "$ceiling")" || ceiling=""
+    if { [ -e "$INSTALL_DIR/.git" ] || [ -L "$INSTALL_DIR/.git" ]; } && ! GIT_CEILING_DIRECTORIES="$ceiling" git -C "$INSTALL_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
         local broken
         broken="${INSTALL_DIR}.broken-$(date -u +%Y%m%d-%H%M%S)"
         log_warn "$INSTALL_DIR is not a usable git checkout (interrupted clone or damaged .git); moving it aside to $broken"
@@ -1171,6 +1188,7 @@ stage_gateway() {
 
 stage_complete() {
     local commit
+    drop_git_location_env
     commit="$INSTALL_COMMIT"
     [ -n "$commit" ] || commit=$(git -C "$INSTALL_DIR" rev-parse HEAD 2>/dev/null) || commit=""
     if [ -n "$commit" ]; then
